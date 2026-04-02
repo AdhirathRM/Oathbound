@@ -8,6 +8,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 
 /**
@@ -70,7 +71,11 @@ private Player player;
                 if (e.getKeyCode() == java.awt.event.KeyEvent.VK_SPACE) player.jump();
                 if (e.getKeyCode() == java.awt.event.KeyEvent.VK_LEFT)  player.setLeft(true);
                 if (e.getKeyCode() == java.awt.event.KeyEvent.VK_RIGHT) player.setRight(true);
-            }
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_Z) {
+                    player.attack();
+                    System.out.println("[PB-012] Melee swing triggered!");
+                }
+            }   
 
             @Override
             public void keyReleased(java.awt.event.KeyEvent e) {
@@ -249,6 +254,13 @@ private Player player;
     g.setColor(Color.DARK_GRAY);
     g.fillRect(0, 0, GameWindow.WIDTH, GameWindow.HEIGHT);
     
+    player.render(g);
+
+    Rectangle hb = player.getAttackHitbox();
+    if (hb != null) {
+        g.setColor(new Color(255, 0, 0, 150)); // Semi-transparent red
+        g.fillRect(hb.x, hb.y, hb.width, hb.height);
+    }
     // Draw the map first
     tileMap.render(g);
 

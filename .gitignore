@@ -1,0 +1,19 @@
+# Compiled output
+out/
+*.class
+
+# VS Code Java
+.classpath
+.project
+.settings/
+bin/
+
+# IntelliJ / other IDEs
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

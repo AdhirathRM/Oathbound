@@ -64,27 +64,66 @@ public class PhysicsComponent {
      * @param solidTiles collision rectangles from TileMapLoader
      */
     public void update(float dt, Rectangle bounds, List<Rectangle> solidTiles) {
+        update(dt, bounds, solidTiles, 1280, 720);
+    }
+
+    /**
+     * Overload that also clamps the entity to the screen boundaries.
+     *
+     * @param screenW  screen width  in pixels (GameWindow.WIDTH)
+     * @param screenH  screen height in pixels (GameWindow.HEIGHT)
+     */
+    public void update(float dt, Rectangle bounds, List<Rectangle> solidTiles,
+                       int screenW, int screenH) {
+
         // ── 1. Apply gravity ──────────────────────────────────────────────────
         velocityY += GRAVITY * dt;
         if (velocityY > MAX_FALL_SPEED) velocityY = MAX_FALL_SPEED;
 
         // ── 2. Move vertically, then resolve vertical collisions ──────────────
+        //
+        // FIX (intermittent jump): We snap the player DOWN by 1 pixel before
+        // checking so that floating-point rounding can't leave the player 1 px
+        // above the tile surface where onGround would never be set.
+        // We then probe for ground contact BEFORE moving so that landing is
+        // detected on the very frame the player comes to rest.
         onGround = false;
+
+        // Ground-probe: peek 2px below current feet — if a tile is right there,
+        // we are standing on it regardless of velocityY (handles the case where
+        // the player is stationary and gravity hasn't produced a positive dy yet
+        // because last frame's collision zeroed it).
+        Rectangle groundProbe = new Rectangle(bounds.x + 2, bounds.y + bounds.height,
+                                               bounds.width - 4, 2);
+        for (Rectangle tile : solidTiles) {
+            if (groundProbe.intersects(tile)) {
+                onGround = true;
+                break;
+            }
+        }
+
         bounds.y += (int) (velocityY * dt);
 
+        // Find the closest tile collision in the vertical axis (most overlap)
+        // so that corner-grazing a seam doesn't cause random non-collisions.
+        int     bestOverlap = 0;
+        Rectangle bestTile  = null;
         for (Rectangle tile : solidTiles) {
             if (!bounds.intersects(tile)) continue;
-
-            if (velocityY > 0) {
+            int overlap = Math.min(bounds.y + bounds.height, tile.y + tile.height)
+                        - Math.max(bounds.y, tile.y);
+            if (overlap > bestOverlap) { bestOverlap = overlap; bestTile = tile; }
+        }
+        if (bestTile != null) {
+            if (velocityY >= 0) {
                 // Falling — land on top of tile
-                bounds.y = tile.y - bounds.height;
-                onGround = true;
+                bounds.y = bestTile.y - bounds.height;
+                onGround  = true;
             } else {
                 // Rising — hit the underside of a tile
-                bounds.y = tile.y + tile.height;
+                bounds.y = bestTile.y + bestTile.height;
             }
             velocityY = 0f;
-            break; // one vertical collision per frame is sufficient
         }
 
         // ── 3. Move horizontally, then resolve horizontal collisions ──────────
@@ -102,6 +141,28 @@ public class PhysicsComponent {
             }
             velocityX = 0f;
             break;
+        }
+
+        // ── 4. Screen-boundary clamping ───────────────────────────────────────
+        // FIX (off-screen): clamp X so the player can't walk off either edge.
+        if (bounds.x < 0) {
+            bounds.x  = 0;
+            velocityX = 0f;
+        }
+        if (bounds.x + bounds.width > screenW) {
+            bounds.x  = screenW - bounds.width;
+            velocityX = 0f;
+        }
+        // Clamp Y: prevent falling off the bottom of the screen.
+        if (bounds.y + bounds.height > screenH) {
+            bounds.y  = screenH - bounds.height;
+            velocityY = 0f;
+            onGround  = true;
+        }
+        // Prevent going above the top of the screen.
+        if (bounds.y < 0) {
+            bounds.y  = 0;
+            velocityY = 0f;
         }
     }
 

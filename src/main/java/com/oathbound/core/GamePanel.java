@@ -51,6 +51,7 @@ private final TileMapLoader tileMap = new TileMapLoader();
 // PB-002 — temporary block-character bounds for testing (replaced by Player in PB-008)
 // Remove the old separate variables
 private Player player;
+
     // ── Constructor ──────────────────────────────────────────────────────────
 
     // ── Constructor ──────────────────────────────────────────────────────────
@@ -61,7 +62,7 @@ private Player player;
         setDoubleBuffered(true);   
         setFocusable(true);        
         
-        player = new Player(100, 200); 
+        player = new Player(100, 100); // Starting position (x=100, y=100)
         tileMap.load("/levels/level_test.txt");
 
         addKeyListener(new java.awt.event.KeyAdapter() {
@@ -254,7 +255,7 @@ private Player player;
     g.setColor(Color.DARK_GRAY);
     g.fillRect(0, 0, GameWindow.WIDTH, GameWindow.HEIGHT);
     
-    player.render(g);
+    
 
     Rectangle hb = player.getAttackHitbox();
     if (hb != null) {

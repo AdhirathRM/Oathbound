@@ -24,7 +24,7 @@ import java.awt.RenderingHints;
 public class GamePanel extends JPanel implements Runnable {
 
     // ── Constants ────────────────────────────────────────────────────────────
-
+    
     /** Target frames per second (PB-001). */
     private static final int    TARGET_FPS        = 60;
 
@@ -44,7 +44,12 @@ public class GamePanel extends JPanel implements Runnable {
 
     /** Running delta-time in seconds, updated every frame. */
     private double deltaTime = 0;
+    // PB-004
+private final TileMapLoader tileMap = new TileMapLoader();
 
+// PB-002 — temporary block-character bounds for testing (replaced by Player in PB-008)
+private final java.awt.Rectangle playerBounds = new java.awt.Rectangle(100, 200, 32, 48);
+private final PhysicsComponent   physics      = new PhysicsComponent();
     // ── Constructor ──────────────────────────────────────────────────────────
 
     public GamePanel() {
@@ -52,6 +57,28 @@ public class GamePanel extends JPanel implements Runnable {
         setBackground(Color.BLACK);
         setDoubleBuffered(true);   // reduces flicker
         setFocusable(true);        // allows key input once KeyListeners are added
+        tileMap.load("/levels/level_test.txt");
+        addKeyListener(new java.awt.event.KeyAdapter() {
+    @Override
+    public void keyPressed(java.awt.event.KeyEvent e) {
+        if (e.getKeyCode() == java.awt.event.KeyEvent.VK_SPACE) {
+            boolean jumped = physics.jump();
+            if (jumped) System.out.println("[PB-003] Jump!");
+        }
+        // Left/right movement for testing — will move to Player in PB-008/009
+        if (e.getKeyCode() == java.awt.event.KeyEvent.VK_LEFT)  physics.velocityX = -200f;
+        if (e.getKeyCode() == java.awt.event.KeyEvent.VK_RIGHT) physics.velocityX =  200f;
+    }
+
+    @Override
+    public void keyReleased(java.awt.event.KeyEvent e) {
+        if (e.getKeyCode() == java.awt.event.KeyEvent.VK_LEFT
+         || e.getKeyCode() == java.awt.event.KeyEvent.VK_RIGHT) {
+            physics.velocityX = 0f;
+        }
+    }
+});
+currentState = GameState.PLAY; // skip menu for now so you can see the map
     }
 
     // ── Game Loop ─────────────────────────────────────────────────────────────
@@ -157,7 +184,8 @@ public class GamePanel extends JPanel implements Runnable {
 
     /** Placeholder — Sprint 1 onwards will fill this in (PB-002 … PB-007). */
     private void updatePlay(double dt) {
-        // TODO PB-002: gravity
+        
+        physics.update((float) dt, playerBounds, tileMap.getSolidTiles());
         // TODO PB-003: jumping
         // TODO PB-006: collision detection
     }
@@ -226,6 +254,11 @@ public class GamePanel extends JPanel implements Runnable {
         g.setFont(new Font("SansSerif", Font.BOLD, 24));
         drawCentredString(g, "PLAY state — Sprint 1 work starts here",
                           GameWindow.WIDTH / 2, GameWindow.HEIGHT / 2);
+         tileMap.render(g);
+
+    // Temp block character — replaced by sprite in PB-008/PB-009
+    g.setColor(Color.CYAN);
+    g.fillRect(playerBounds.x, playerBounds.y, playerBounds.width, playerBounds.height);
     }
 
     /** Placeholder render for the boss battle. */

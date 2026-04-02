@@ -33,12 +33,21 @@ public class GameWindow {
         gamePanel = new GamePanel();
 
         frame = new JFrame(TITLE);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE); // handle manually
         frame.setResizable(false);
 
+        // Stop the game loop cleanly before JVM exits
+        frame.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                gamePanel.stopGameLoop();
+                frame.dispose();
+            }
+        });
+
         frame.add(gamePanel);
-        frame.pack();                     // size the frame around the panel's preferredSize
-        frame.setLocationRelativeTo(null); // centre on screen
+        frame.pack();
+        frame.setLocationRelativeTo(null);
     }
 
     // ── Public API ───────────────────────────────────────────────────────────

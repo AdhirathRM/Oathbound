@@ -48,39 +48,40 @@ public class GamePanel extends JPanel implements Runnable {
 private final TileMapLoader tileMap = new TileMapLoader();
 
 // PB-002 — temporary block-character bounds for testing (replaced by Player in PB-008)
-private final java.awt.Rectangle playerBounds = new java.awt.Rectangle(100, 200, 32, 48);
-private final PhysicsComponent   physics      = new PhysicsComponent();
+// Remove the old separate variables
+private Player player;
+    // ── Constructor ──────────────────────────────────────────────────────────
+
     // ── Constructor ──────────────────────────────────────────────────────────
 
     public GamePanel() {
         setPreferredSize(new Dimension(GameWindow.WIDTH, GameWindow.HEIGHT));
         setBackground(Color.BLACK);
-        setDoubleBuffered(true);   // reduces flicker
-        setFocusable(true);        // allows key input once KeyListeners are added
+        setDoubleBuffered(true);   
+        setFocusable(true);        
+        
+        player = new Player(100, 200); 
         tileMap.load("/levels/level_test.txt");
+
         addKeyListener(new java.awt.event.KeyAdapter() {
-    @Override
-    public void keyPressed(java.awt.event.KeyEvent e) {
-        if (e.getKeyCode() == java.awt.event.KeyEvent.VK_SPACE) {
-            boolean jumped = physics.jump();
-            if (jumped) System.out.println("[PB-003] Jump!");
-        }
-        // Left/right movement for testing — will move to Player in PB-008/009
-        if (e.getKeyCode() == java.awt.event.KeyEvent.VK_LEFT)  physics.velocityX = -200f;
-        if (e.getKeyCode() == java.awt.event.KeyEvent.VK_RIGHT) physics.velocityX =  200f;
-    }
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                if (player == null) return;
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_SPACE) player.jump();
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_LEFT)  player.setLeft(true);
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_RIGHT) player.setRight(true);
+            }
 
-    @Override
-    public void keyReleased(java.awt.event.KeyEvent e) {
-        if (e.getKeyCode() == java.awt.event.KeyEvent.VK_LEFT
-         || e.getKeyCode() == java.awt.event.KeyEvent.VK_RIGHT) {
-            physics.velocityX = 0f;
-        }
-    }
-});
-currentState = GameState.PLAY; // skip menu for now so you can see the map
-    }
+            @Override
+            public void keyReleased(java.awt.event.KeyEvent e) {
+                if (player == null) return;
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_LEFT)  player.setLeft(false);
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_RIGHT) player.setRight(false);
+            }
+        }); // This closes the listener
 
+        currentState = GameState.PLAY; 
+    } // This closes the constructor
     // ── Game Loop ─────────────────────────────────────────────────────────────
 
     /**
@@ -184,11 +185,7 @@ currentState = GameState.PLAY; // skip menu for now so you can see the map
 
     /** Placeholder — Sprint 1 onwards will fill this in (PB-002 … PB-007). */
     private void updatePlay(double dt) {
-        
-        physics.update((float) dt, playerBounds, tileMap.getSolidTiles(),
-                       GameWindow.WIDTH, GameWindow.HEIGHT);
-        // TODO PB-003: jumping
-        // TODO PB-006: collision detection
+    player.update((float) dt, tileMap.getSolidTiles());
     }
 
     /** Placeholder — Sprint 4 (PB-022) will implement the turn-based loop. */
@@ -249,18 +246,17 @@ currentState = GameState.PLAY; // skip menu for now so you can see the map
 
     /** Placeholder render for the platformer. */
     private void renderPlay(Graphics2D g) {
-        g.setColor(Color.DARK_GRAY);
-        g.fillRect(0, 0, GameWindow.WIDTH, GameWindow.HEIGHT);
-        g.setColor(Color.WHITE);
-        g.setFont(new Font("SansSerif", Font.BOLD, 24));
-        drawCentredString(g, "PLAY state — Sprint 1 work starts here",
-                          GameWindow.WIDTH / 2, GameWindow.HEIGHT / 2);
-         tileMap.render(g);
+    g.setColor(Color.DARK_GRAY);
+    g.fillRect(0, 0, GameWindow.WIDTH, GameWindow.HEIGHT);
+    
+    // Draw the map first
+    tileMap.render(g);
 
-    // Temp block character — replaced by sprite in PB-008/PB-009
-    g.setColor(Color.CYAN);
-    g.fillRect(playerBounds.x, playerBounds.y, playerBounds.width, playerBounds.height);
+    // Draw the player (PB-008)
+    if (player != null) {
+        player.render(g);
     }
+}
 
     /** Placeholder render for the boss battle. */
     private void renderBoss(Graphics2D g) {

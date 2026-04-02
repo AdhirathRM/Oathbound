@@ -185,7 +185,8 @@ currentState = GameState.PLAY; // skip menu for now so you can see the map
     /** Placeholder — Sprint 1 onwards will fill this in (PB-002 … PB-007). */
     private void updatePlay(double dt) {
         
-        physics.update((float) dt, playerBounds, tileMap.getSolidTiles());
+        physics.update((float) dt, playerBounds, tileMap.getSolidTiles(),
+                       GameWindow.WIDTH, GameWindow.HEIGHT);
         // TODO PB-003: jumping
         // TODO PB-006: collision detection
     }

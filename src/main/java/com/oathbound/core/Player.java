@@ -3,31 +3,43 @@ package com.oathbound.core;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import java.io.IOException;
 import java.util.List;
 
 /**
- * PB-008 & PB-012 — Player Class
- * * Represents the playable hero. Handles physics, movement direction, 
- * and melee attack hitbox generation.
+ * PB-008, PB-009, & PB-012 — Player (The Knight)
+ * Handles Physics, 56x56 Sprite Animations (Walk/Attack), and Hitboxes.
  */
 public class Player {
 
-    // ── Fields ───────────────────────────────────────────────────────────────
+    // ── Dimensions ───────────────────────────────────────────────────────────
+    private final int width = 56;
+    private final int height = 56;
 
+    // ── Physics & Bounds ─────────────────────────────────────────────────────
     private final Rectangle bounds;
     private final PhysicsComponent physics;
-    
-    // Player dimensions
-    private final int width = 32;
-    private final int height = 48;
 
-    // PB-012 Combat Fields
+    // ── Animation Arrays (PB-009) ────────────────────────────────────────────
+    private BufferedImage[] walkFrames;
+    private BufferedImage[] attackFrames;
+    
+    // Animation State Tracking
+    private int frameIndex = 0;
+    private int animTick = 0;
+    private final int animSpeed = 8; 
+
+    private int attackFrameIndex = 0;
+    private int attackAnimTick = 0;
+    private final int attackAnimSpeed = 3; // Attack frames flip faster
+
+    // ── Combat State (PB-012) ───────────────────────────────────────────────
     private boolean isAttacking = false;
     private int facing = 1; // 1 = Right, -1 = Left
     private final Rectangle attackHitbox;
-    
-    /** How long the melee hitbox stays active (in milliseconds). */
-    private final int attackDurationMs = 150;
+    private final int attackDurationMs = 250; // Increased to fit 7 frames
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -35,52 +47,113 @@ public class Player {
         this.bounds = new Rectangle(startX, startY, width, height);
         this.physics = new PhysicsComponent();
         this.attackHitbox = new Rectangle();
+        
+        loadSprites();
     }
 
-    // ── Update & Render ──────────────────────────────────────────────────────
-
     /**
-     * Updates the player's position and resolves collisions.
+     * PB-009: Slices both the Walking (6 frames) and Attacking (7 frames) sheets.
      */
-    public void update(float dt, List<Rectangle> solidTiles) {
-        physics.update(dt, bounds, solidTiles, GameWindow.WIDTH, GameWindow.HEIGHT);
-        
-        // If attacking, keep the hitbox locked to the player's current position
-        if (isAttacking) {
-            updateHitbox();
+    private void loadSprites() {
+        try {
+            // 1. Load Walking Sheet (336x56)
+            var walkRes = getClass().getResourceAsStream("/sprites/knight_walk.png");
+            if (walkRes != null) {
+                BufferedImage walkSheet = ImageIO.read(walkRes);
+                walkFrames = new BufferedImage[6];
+                for (int i = 0; i < 6; i++) {
+                    walkFrames[i] = walkSheet.getSubimage(i * width, 0, width, height);
+                }
+            }
+
+            // 2. Load Attack Sheet (392x56)
+            var attackRes = getClass().getResourceAsStream("/sprites/knight_attack.png");
+            if (attackRes != null) {
+                BufferedImage attackSheet = ImageIO.read(attackRes);
+                attackFrames = new BufferedImage[7];
+                for (int i = 0; i < 7; i++) {
+                    attackFrames[i] = attackSheet.getSubimage(i * width, 0, width, height);
+                }
+            }
+            
+            System.out.println("[PB-009] All Knight sprites loaded and sliced.");
+        } catch (IOException e) {
+            System.err.println("[PB-009] Error loading sprites: " + e.getMessage());
         }
     }
 
-    /**
-     * Draws the player and their attack hitbox if active.
-     */
-    public void render(Graphics2D g) {
-        // Draw Player Body
-        g.setColor(Color.CYAN);
-        g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-        
-        g.setColor(Color.WHITE);
-        g.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
+    // ── Core Loop ────────────────────────────────────────────────────────────
 
-        // PB-012: Draw Attack Hitbox (Debug Visualization)
+    public void update(float dt, List<Rectangle> solidTiles) {
+        // Update Physics
+        physics.update(dt, bounds, solidTiles, GameWindow.WIDTH, GameWindow.HEIGHT);
+
         if (isAttacking) {
-            g.setColor(new Color(255, 0, 0, 120)); // Semi-transparent red
+            // Attack Animation Priority
+            attackAnimTick++;
+            if (attackAnimTick >= attackAnimSpeed) {
+                attackAnimTick = 0;
+                if (attackFrameIndex < 6) { // Progress through 7 frames (0 to 6)
+                    attackFrameIndex++;
+                }
+            }
+            updateHitbox();
+        } else {
+            // Walking Animation Logic
+            attackFrameIndex = 0; // Reset attack counters
+            attackAnimTick = 0;
+
+            if (Math.abs(physics.velocityX) > 0.1f) {
+                animTick++;
+                if (animTick >= animSpeed) {
+                    animTick = 0;
+                    frameIndex = (frameIndex + 1) % 6; 
+                }
+            } else {
+                frameIndex = 0; 
+            }
+        }
+    }
+
+    public void render(Graphics2D g) {
+        BufferedImage currentFrame = null;
+
+        // Choose frame based on state
+        if (isAttacking && attackFrames != null) {
+            currentFrame = attackFrames[attackFrameIndex];
+        } else if (walkFrames != null) {
+            currentFrame = walkFrames[frameIndex];
+        }
+
+        if (currentFrame != null) {
+            if (facing == 1) {
+                g.drawImage(currentFrame, bounds.x, bounds.y, width, height, null);
+            } else {
+                // Flip horizontally
+                g.drawImage(currentFrame, bounds.x + width, bounds.y, -width, height, null);
+            }
+        } else {
+            // Fallback Placeholder
+            g.setColor(Color.CYAN);
+            g.fillRect(bounds.x, bounds.y, width, height);
+        }
+        
+        // PB-012 Debug: You can comment this out once satisfied
+        if (isAttacking) {
+            g.setColor(new Color(255, 0, 0, 100));
             g.fillRect(attackHitbox.x, attackHitbox.y, attackHitbox.width, attackHitbox.height);
         }
     }
 
-    // ── Combat Logic ─────────────────────────────────────────────────────────
+    // ── Combat & Input ───────────────────────────────────────────────────────
 
-    /**
-     * PB-012 — Triggers a melee swing.
-     * Starts a brief timer to deactivate the hitbox after attackDurationMs.
-     */
     public void attack() {
         if (!isAttacking) {
             isAttacking = true;
+            attackFrameIndex = 0; // Start at first frame of animation
             updateHitbox();
 
-            // Simple timer to end the attack state
+            // End attack after a delay
             new Thread(() -> {
                 try {
                     Thread.sleep(attackDurationMs);
@@ -92,21 +165,14 @@ public class Player {
         }
     }
 
-    /**
-     * Positions the hitbox rectangle relative to the player's bounds and direction.
-     */
     private void updateHitbox() {
-        int hbW = 40; // Hitbox width
-        int hbH = 32; // Hitbox height
-        
-        // If facing right (1), place in front. If left (-1), place behind.
-        int hbX = (facing == 1) ? bounds.x + bounds.width : bounds.x - hbW;
-        int hbY = bounds.y + (bounds.height / 4);
+        int hbW = 50; 
+        int hbH = 40;
+        int hbX = (facing == 1) ? bounds.x + width : bounds.x - hbW;
+        int hbY = bounds.y + (height / 4);
 
         attackHitbox.setBounds(hbX, hbY, hbW, hbH);
     }
-
-    // ── Input Hooks ──────────────────────────────────────────────────────────
 
     public void setLeft(boolean pressed) {
         if (pressed) facing = -1;
@@ -123,11 +189,6 @@ public class Player {
     }
 
     // ── Getters ──────────────────────────────────────────────────────────────
-
     public Rectangle getBounds() { return bounds; }
-    
-    /** @return the current attack hitbox, or null if not attacking. */
-    public Rectangle getAttackHitbox() {
-        return isAttacking ? attackHitbox : null;
-    }
+    public Rectangle getAttackHitbox() { return isAttacking ? attackHitbox : null; }
 }

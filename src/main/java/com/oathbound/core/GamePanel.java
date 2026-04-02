@@ -66,6 +66,16 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     /**
+     * Stops the game-loop thread cleanly.
+     * Setting gameThread to null causes the while-condition in run() to exit.
+     * Called on window close (PB-001 AC: loop stops cleanly).
+     */
+    public void stopGameLoop() {
+        System.out.println("[GameLoop] Stopping...");
+        gameThread = null;
+    }
+
+    /**
      * Fixed-timestep game loop running on the gameThread.
      *
      * Implementation:

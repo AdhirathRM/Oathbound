@@ -8,12 +8,13 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * GamePanel: The central engine for Oathbound.
- * Supports Knight, Archer, and Mage (PB-016) across 9 Levels (PB-019).
+ * PB-015: Fixed Hero Swapping by disabling Focus Traversal.
  */
 public class GamePanel extends JPanel implements Runnable {
 
@@ -26,82 +27,110 @@ public class GamePanel extends JPanel implements Runnable {
     private double deltaTime = 0;
 
     private final TileMapLoader tileMap = new TileMapLoader();
-    private Player player;
-    private final HUD hud = new HUD(); 
+    
+    // PB-015: Roster Management
+    private Player player; 
+    private final List<Player> roster = new ArrayList<>();
+    private int currentHeroIndex = 0;
 
-    // Entities
+    private final HUD hud = new HUD(); 
     private final List<Projectile> projectiles = new ArrayList<>();
     private final List<Enemy> enemies = new ArrayList<>();
 
-    // Level & Checkpoint Management
     private int currentLevel = 1;
     private final int MAX_LEVELS = 9;
     private VowStone currentVowStone;
 
-    // PB-016: Visual Explosion Feedback
-    private int explosionX, explosionY;
-    private int explosionTimer = 0;
+    private int explosionX, explosionY, explosionTimer = 0;
 
     public GamePanel() {
         setPreferredSize(new Dimension(GameWindow.WIDTH, GameWindow.HEIGHT));
         setBackground(Color.BLACK);
         setDoubleBuffered(true);   
         setFocusable(true);        
+
+        // --- THE FIX FOR TAB KEY ---
+        // Prevents Java from using TAB to switch between UI components
+        this.setFocusTraversalKeysEnabled(false); 
         
-        // PB-017: Currently playing as the Beastman
-        // In GamePanel.java constructor
-        player = new Samurai(100, 200);
+        // Initialize the Full Party
+        roster.add(new Player(100, 200)); // Knight
+        roster.add(new Archer(100, 200, projectiles));
+        roster.add(new Mage(100, 200, projectiles));
+        roster.add(new Beastman(100, 200));
+        roster.add(new Samurai(100, 200));
         
+        player = roster.get(currentHeroIndex);
         loadLevel(currentLevel);
 
         addKeyListener(new java.awt.event.KeyAdapter() {
             @Override
-            public void keyPressed(java.awt.event.KeyEvent e) {
+            public void keyPressed(KeyEvent e) {
                 if (player == null) return;
                 int code = e.getKeyCode();
                 
-                if (code == java.awt.event.KeyEvent.VK_SPACE) player.jump();
-                if (code == java.awt.event.KeyEvent.VK_LEFT)  player.setLeft(true);
-                if (code == java.awt.event.KeyEvent.VK_RIGHT) player.setRight(true);
-                if (code == java.awt.event.KeyEvent.VK_Z)     player.attack();
+                // PB-015: The Swap Trigger
+                if (code == KeyEvent.VK_TAB) {
+                    swapHero();
+                }
+
+                if (code == KeyEvent.VK_SPACE) player.jump();
+                if (code == KeyEvent.VK_LEFT)  player.setLeft(true);
+                if (code == KeyEvent.VK_RIGHT) player.setRight(true);
+                if (code == KeyEvent.VK_Z)     player.attack();
                 
-                if (code == java.awt.event.KeyEvent.VK_ENTER && currentState == GameState.MENU) {
+                if (code == KeyEvent.VK_ENTER && currentState == GameState.MENU) {
                     setGameState(GameState.PLAY);
                 }
             }
 
             @Override
-            public void keyReleased(java.awt.event.KeyEvent e) {
+            public void keyReleased(KeyEvent e) {
                 if (player == null) return;
                 int code = e.getKeyCode();
-                if (code == java.awt.event.KeyEvent.VK_LEFT)  player.setLeft(false);
-                if (code == java.awt.event.KeyEvent.VK_RIGHT) player.setRight(false);
+                if (code == KeyEvent.VK_LEFT)  player.setLeft(false);
+                if (code == KeyEvent.VK_RIGHT) player.setRight(false);
             }
         });
 
-        currentState = GameState.MENU; 
+        this.requestFocusInWindow();
+    }
+
+    private void swapHero() {
+        System.out.println("[DEBUG] Swapping Hero... Current: " + player.getClass().getSimpleName());
+        
+        int oldX = player.getBounds().x;
+        int oldY = player.getBounds().y;
+        int oldHealth = player.getHealth();
+
+        currentHeroIndex = (currentHeroIndex + 1) % roster.size();
+        player = roster.get(currentHeroIndex);
+        
+        player.resetPosition(oldX, oldY);
+        player.setHealth(oldHealth); 
+
+        System.out.println("[DEBUG] Swapped to: " + player.getClass().getSimpleName());
+    }
+
+    public void stopGameLoop() {
+        gameThread = null;
     }
 
     private void loadLevel(int levelNumber) {
-        System.out.println("[System] Loading Level " + levelNumber);
         projectiles.clear();
         enemies.clear();
         explosionTimer = 0;
-
         tileMap.load("/levels/level_" + levelNumber + ".txt");
 
-        if (player != null) {
-            player.resetPosition(100, 200);
+        for (Player p : roster) {
+            p.resetPosition(100, 200);
         }
 
-        // Logic for spawning Level Entities
         if (levelNumber == 1) {
             currentVowStone = new VowStone(1100, 544); 
             enemies.add(new Enemy(600, 200));
-            enemies.add(new Enemy(660, 200)); // Grouped for AOE testing
         } else {
             currentVowStone = new VowStone(1100, 544);
-            enemies.add(new Enemy(500, 200));
         }
     }
 
@@ -109,8 +138,6 @@ public class GamePanel extends JPanel implements Runnable {
         gameThread = new Thread(this, "GameLoop");
         gameThread.start();
     }
-
-    public void stopGameLoop() { gameThread = null; }
 
     @Override
     public void run() {
@@ -130,20 +157,21 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void update(double dt) {
-        if (currentState == GameState.PLAY) updatePlay(dt);
+        if (currentState == GameState.PLAY) {
+            if (!this.hasFocus()) this.requestFocusInWindow();
+            updatePlay(dt);
+        }
     }
 
     private void updatePlay(double dt) {
         if (player != null) {
             player.update((float) dt, tileMap.getSolidTiles());
 
-            // PB-021: Fall Detection
             if (player.getBounds().y > GameWindow.HEIGHT) {
-                player.takeDamage(1); // Optional: Pits hurt!
+                player.takeDamage(1);
                 player.resetPosition(100, 200); 
             }
 
-            // PB-020: Checkpoint/Next Level
             if (currentVowStone != null && currentVowStone.checkCollision(player.getBounds())) {
                 currentLevel++;
                 if (currentLevel > MAX_LEVELS) {
@@ -155,54 +183,37 @@ public class GamePanel extends JPanel implements Runnable {
             }
         }
 
-        // Update Projectiles
         for (int i = projectiles.size() - 1; i >= 0; i--) {
             Projectile p = projectiles.get(i);
             p.update((float) dt, tileMap.getSolidTiles());
             if (!p.isActive()) projectiles.remove(i);
         }
 
-        // Update Enemies & Combat
         for (int i = enemies.size() - 1; i >= 0; i--) {
             Enemy enemy = enemies.get(i);
             enemy.update((float) dt, tileMap.getSolidTiles());
+            if (!enemy.isActive()) { enemies.remove(i); continue; }
 
-            if (!enemy.isActive()) {
-                enemies.remove(i);
-                continue;
-            }
-
-            // Projectile Logic
             for (Projectile p : projectiles) {
                 if (p.isActive() && p.getBounds().intersects(enemy.getBounds())) {
-                    if (p.isAOE()) {
-                        triggerExplosion(p);
-                    } else {
-                        enemy.takeDamage(1);
-                    }
+                    if (p.isAOE()) triggerExplosion(p);
+                    else enemy.takeDamage(1);
                     p.deactivate();
                     break; 
                 }
             }
         }
-
-        // Decay the visual explosion timer
         if (explosionTimer > 0) explosionTimer--;
     }
 
     private void triggerExplosion(Projectile p) {
         explosionX = (int)p.getBounds().getCenterX();
         explosionY = (int)p.getBounds().getCenterY();
-        explosionTimer = 12; // Show blast for 12 frames (~0.2 seconds)
-
+        explosionTimer = 12;
         for (Enemy e : enemies) {
-            double dx = explosionX - e.getBounds().getCenterX();
-            double dy = explosionY - e.getBounds().getCenterY();
-            double distance = Math.sqrt(dx*dx + dy*dy);
-
-            if (distance <= p.getExplosionRadius()) {
-                e.takeDamage(2); 
-            }
+            double dist = Math.sqrt(Math.pow(explosionX - e.getBounds().getCenterX(), 2) + 
+                                    Math.pow(explosionY - e.getBounds().getCenterY(), 2));
+            if (dist <= p.getExplosionRadius()) e.takeDamage(2); 
         }
     }
 
@@ -231,19 +242,15 @@ public class GamePanel extends JPanel implements Runnable {
     private void renderPlay(Graphics2D g) {
         g.setColor(new Color(30, 30, 35));
         g.fillRect(0, 0, GameWindow.WIDTH, GameWindow.HEIGHT);
-
         tileMap.render(g);
         if (currentVowStone != null) currentVowStone.render(g);
         for (Enemy e : enemies) e.render(g);
         for (Projectile p : projectiles) p.render(g);
         
-        // PB-016: Render the Mana Burst Visual
         if (explosionTimer > 0) {
-            g.setColor(new Color(0, 200, 255, 100)); // Transparent Blue
-            int radius = 130; 
-            g.fillOval(explosionX - radius, explosionY - radius, radius * 2, radius * 2);
-            g.setColor(new Color(255, 255, 255, 150)); // White Flash center
-            g.fillOval(explosionX - 20, explosionY - 20, 40, 40);
+            g.setColor(new Color(0, 200, 255, 100));
+            int r = 130; 
+            g.fillOval(explosionX - r, explosionY - r, r * 2, r * 2);
         }
 
         if (player != null) player.render(g);

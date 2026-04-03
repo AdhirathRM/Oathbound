@@ -158,6 +158,13 @@ public class GamePanel extends JPanel implements Runnable {
             player.update((float) dt, tileMap.getSolidTiles());
         }
 
+        // PB-021: Pit Detection (Death by falling)
+            if (player.getBounds().y > GameWindow.HEIGHT) {
+                System.out.println("[PB-021] Player fell into a pit!");
+                // You can add player.takeDamage(1) here if you want pits to hurt
+                player.resetPosition(100, 200); 
+            }
+
         // Update Projectiles
         for (int i = projectiles.size() - 1; i >= 0; i--) {
             Projectile p = projectiles.get(i);

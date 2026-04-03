@@ -201,7 +201,18 @@ public class Player {
     public int getFacing() { return this.facing; }
     
     // Add this missing method right here:
-    public Rectangle getAttackHitbox() { 
-        return isAttacking ? attackHitbox : null; 
+    public Rectangle getAttackHitbox() {
+        return isAttacking ? attackHitbox : null;
+    }
+    
+    /**
+     * PB-019 & PB-021: Resets the player's position and halts momentum.
+     * Used for loading new levels or recovering from a pit fall.
+     */
+    public void resetPosition(int x, int y) {
+        this.bounds.x = x;
+        this.bounds.y = y;
+        this.physics.velocityX = 0;
+        this.physics.velocityY = 0;
     }
 }

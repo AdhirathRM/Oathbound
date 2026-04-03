@@ -9,8 +9,8 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * PB-008, PB-009, PB-014 — Base Player Class
- * Now includes Health (PB-014) and Reset logic (PB-019/021).
+ * PB-008, PB-009, PB-014, PB-017 — Base Player Class
+ * Integrated for Knight, Archer, Mage, and Beastman support.
  */
 public class Player {
 
@@ -32,17 +32,17 @@ public class Player {
     
     protected int frameIndex = 0;
     protected int animTick = 0;
-    protected final int animSpeed = 8; 
+    protected int animSpeed = 8; 
 
     protected int attackFrameIndex = 0;
     protected int attackAnimTick = 0;
-    protected final int attackAnimSpeed = 3; 
+    protected int attackAnimSpeed = 3; 
 
     // ── States ───────────────────────────────────────────────────────────────
     protected boolean isAttacking = false;
     protected int facing = 1; // 1 = Right, -1 = Left
     protected final Rectangle attackHitbox;
-    protected int attackDurationMs = 250; 
+    protected int attackDurationMs = 250; // Default (Knight)
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -54,6 +54,10 @@ public class Player {
         loadSprites();
     }
 
+    /**
+     * Default sprite loader. Subclasses (Archer, Mage, Beastman) 
+     * override this to load their specific PNGs.
+     */
     protected void loadSprites() {
         try {
             var walkRes = getClass().getResourceAsStream("/sprites/knight_walk.png");
@@ -81,6 +85,7 @@ public class Player {
     // ── Core Loop ────────────────────────────────────────────────────────────
 
     public void update(float dt, List<Rectangle> solidTiles) {
+        // Physics update (Includes PB-007 Coyote Time/Jump Buffer)
         physics.update(dt, bounds, solidTiles, GameWindow.WIDTH, GameWindow.HEIGHT);
 
         if (isAttacking) {
@@ -91,6 +96,7 @@ public class Player {
     }
 
     protected void updateWalkAnimation() {
+        // Reset attack frames while walking
         attackFrameIndex = 0;
         attackAnimTick = 0;
 
@@ -119,6 +125,7 @@ public class Player {
     public void render(Graphics2D g) {
         BufferedImage currentFrame = null;
 
+        // Choose frame based on state
         if (isAttacking && attackFrames != null) {
             currentFrame = attackFrames[attackFrameIndex];
         } else if (walkFrames != null) {
@@ -133,8 +140,9 @@ public class Player {
             }
         }
         
-        // Debug Melee Hitbox
-        if (isAttacking && !(this instanceof Archer) && !(this instanceof Mage)) {
+        // PB-012/PB-017 Debug: Show melee hitbox for melee classes only
+        // This keeps the screen clear for the Archer and Mage projectiles.
+        if (isAttacking && (this instanceof Beastman || !(this instanceof Archer || this instanceof Mage))) {
             g.setColor(new Color(255, 0, 0, 100));
             g.fillRect(attackHitbox.x, attackHitbox.y, attackHitbox.width, attackHitbox.height);
         }
@@ -145,7 +153,6 @@ public class Player {
     public void takeDamage(int amount) {
         health -= amount;
         if (health < 0) health = 0;
-        System.out.println("[PB-014] Health: " + health + "/" + maxHealth);
         
         if (health == 0) {
             respawn();
@@ -155,6 +162,7 @@ public class Player {
     public void respawn() {
         health = maxHealth;
         resetPosition(100, 200);
+        System.out.println("[System] Player Respawned.");
     }
 
     public void resetPosition(int x, int y) {
@@ -173,6 +181,7 @@ public class Player {
             attackAnimTick = 0;
             updateHitbox();
 
+            // Handle the attack duration in a background thread
             new Thread(() -> {
                 try {
                     Thread.sleep(attackDurationMs);
@@ -184,6 +193,10 @@ public class Player {
         }
     }
 
+    /**
+     * PB-012/PB-017: Melee collision area.
+     * Beastman overrides this for shorter, rapid swipes.
+     */
     protected void updateHitbox() {
         int hbW = 60; 
         int hbH = 45;

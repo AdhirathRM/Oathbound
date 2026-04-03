@@ -159,6 +159,7 @@ public class Player {
         if (health < 0) health = 0;
         if (health == 0) respawn();
     }
+    public void setHealth(int h) { this.health = h; }
 
     public void respawn() {
         health = maxHealth;

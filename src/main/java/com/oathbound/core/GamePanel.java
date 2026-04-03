@@ -7,7 +7,6 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,8 +48,9 @@ public class GamePanel extends JPanel implements Runnable {
         setDoubleBuffered(true);   
         setFocusable(true);        
         
-        // PB-016: Currently playing as the Mage
-        player = new Mage(100, 200, projectiles); 
+        // PB-017: Currently playing as the Beastman
+        // In GamePanel.java constructor
+        player = new Beastman(100, 200);
         
         loadLevel(currentLevel);
 

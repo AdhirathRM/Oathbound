@@ -44,7 +44,8 @@ public class GamePanel extends JPanel implements Runnable {
         setFocusable(true);        
         
         // Initialize Player (68x68 version)
-        player = new Player(100, 200); 
+        //player = new Player(100, 200); 
+        player = new Archer(100, 200, projectiles);
         tileMap.load("/levels/level_test.txt");
 
         // Key Listener

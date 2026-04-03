@@ -154,7 +154,7 @@ public class Player {
     public void attack() {
         if (!isAttacking) {
             isAttacking = true;
-            attackFrameIndex = 0; 
+            attackFrameIndex = 0;
             attackAnimTick = 0;
             updateHitbox();
 
@@ -170,6 +170,7 @@ public class Player {
         }
     }
 
+    //dynamic melee attack hitbox and visualization added for PB-012
     protected void updateHitbox() {
         int hbW = 60; 
         int hbH = 45;

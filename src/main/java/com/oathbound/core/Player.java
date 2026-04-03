@@ -204,4 +204,7 @@ public class Player {
     // ── Getters ──────────────────────────────────────────────────────────────
     public Rectangle getBounds() { return bounds; }
     public Rectangle getAttackHitbox() { return isAttacking ? attackHitbox : null; }
+    public int getFacing() {
+    return this.facing;
+    }
 }

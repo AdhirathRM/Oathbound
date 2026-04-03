@@ -20,6 +20,8 @@ public class Projectile {
     private final int width = 16;
     private final int height = 16;
 
+    public void deactivate() { this.active = false; }
+
     public Projectile(int x, int y, float velX, float velY) {
         this.bounds = new Rectangle(x, y, width, height);
         this.velocityX = velX;

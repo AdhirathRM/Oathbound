@@ -13,6 +13,9 @@ import java.util.List;
  * Optimized for Inheritance (PB-010) and Animation Priority.
  */
 public class Player {
+    // Add to Player.java fields
+    public int maxHealth = 3;
+    public int currentHealth = 3;
 
     // ── Dimensions ───────────────────────────────────────────────────────────
     protected final int width = 68;
@@ -196,4 +199,9 @@ public class Player {
     // ── Getters ──────────────────────────────────────────────────────────────
     public Rectangle getBounds() { return bounds; }
     public int getFacing() { return this.facing; }
+    
+    // Add this missing method right here:
+    public Rectangle getAttackHitbox() { 
+        return isAttacking ? attackHitbox : null; 
+    }
 }

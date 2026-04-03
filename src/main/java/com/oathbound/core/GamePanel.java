@@ -10,12 +10,16 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.util.ArrayList;
 import java.util.List;
+import java.awt.Rectangle;
 
 /**
  * GamePanel: The engine room of Oathbound.
  * Handles the 60 FPS loop, State Management, and Projectile tracking.
  */
 public class GamePanel extends JPanel implements Runnable {
+
+    private final List<Enemy> enemies = new ArrayList<>();
+    private final HUD hud = new HUD(); // PB-014
 
     // ── Constants ────────────────────────────────────────────────────────────
     private static final int    TARGET_FPS         = 60;
@@ -86,7 +90,12 @@ public class GamePanel extends JPanel implements Runnable {
             }
         });
 
-        currentState = GameState.MENU; 
+        currentState = GameState.MENU;
+        
+        player = new Archer(100, 200, projectiles); 
+        tileMap.load("/levels/level_test.txt");
+        
+        enemies.add(new Enemy(400, 200)); // Spawn a red block enemy
     }
 
     private void fireProjectile() {
@@ -157,6 +166,31 @@ public class GamePanel extends JPanel implements Runnable {
                 projectiles.remove(i);
             }
         }
+
+        // Update Enemies & Check Combat
+        for (int i = enemies.size() - 1; i >= 0; i--) {
+            Enemy enemy = enemies.get(i);
+            enemy.update((float) dt, tileMap.getSolidTiles());
+
+            if (!enemy.isActive()) {
+                enemies.remove(i);
+                continue; 
+            }
+
+            // PB-011: Ranged Combat Check
+            for (Projectile p : projectiles) {
+                if (p.isActive() && p.getBounds().intersects(enemy.getBounds())) {
+                    enemy.takeDamage(1);
+                    p.deactivate(); // Arrow disappears
+                }
+            }
+
+            // PB-012: Melee Combat Check
+            Rectangle pAttack = player.getAttackHitbox();
+            if (pAttack != null && pAttack.intersects(enemy.getBounds())) {
+                enemy.takeDamage(1); 
+            }
+        }
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -186,20 +220,17 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void renderPlay(Graphics2D g) {
-        // Background
         g.setColor(new Color(30, 30, 35));
         g.fillRect(0, 0, GameWindow.WIDTH, GameWindow.HEIGHT);
 
-        // Layers: Map -> Projectiles -> Player
         tileMap.render(g);
 
-        for (Projectile p : projectiles) {
-            p.render(g);
-        }
+        for (Enemy e : enemies) { e.render(g); } // Draw Enemies
+        for (Projectile p : projectiles) { p.render(g); } // Draw Arrows
 
-        if (player != null) {
-            player.render(g);
-        }
+        if (player != null) { player.render(g); }
+
+        hud.render(g, player); // Draw PB-014 Health UI ON TOP of everything
     }
 
     public void setGameState(GameState newState) { this.currentState = newState; }

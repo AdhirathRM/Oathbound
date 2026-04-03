@@ -1,0 +1,13 @@
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+
+# The final stage. Flat, wide open, with high walls on both sides. Perfect for a boss fight or a large wave of enemies before the final Vow Stone.

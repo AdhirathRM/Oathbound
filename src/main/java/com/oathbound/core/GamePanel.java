@@ -50,7 +50,7 @@ public class GamePanel extends JPanel implements Runnable {
         
         // PB-017: Currently playing as the Beastman
         // In GamePanel.java constructor
-        player = new Beastman(100, 200);
+        player = new Samurai(100, 200);
         
         loadLevel(currentLevel);
 

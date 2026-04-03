@@ -9,8 +9,8 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * PB-008, PB-009, PB-014, PB-017 — Base Player Class
- * Integrated for Knight, Archer, Mage, and Beastman support.
+ * PB-008, PB-014, PB-017, PB-018 — Base Player Class
+ * Master class for Knight, Archer, Mage, Beastman, and Samurai.
  */
 public class Player {
 
@@ -22,9 +22,10 @@ public class Player {
     protected final Rectangle bounds;
     protected final PhysicsComponent physics;
 
-    // ── Health System (PB-014) ───────────────────────────────────────────────
+    // ── Health & I-Frames (PB-014 & PB-018) ──────────────────────────────────
     protected int health = 5;
     protected final int maxHealth = 5;
+    protected boolean invincible = false; // Samurai Dash I-Frames
 
     // ── Animation Arrays ─────────────────────────────────────────────────────
     protected BufferedImage[] walkFrames;
@@ -42,7 +43,7 @@ public class Player {
     protected boolean isAttacking = false;
     protected int facing = 1; // 1 = Right, -1 = Left
     protected final Rectangle attackHitbox;
-    protected int attackDurationMs = 250; // Default (Knight)
+    protected int attackDurationMs = 250; 
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -54,10 +55,6 @@ public class Player {
         loadSprites();
     }
 
-    /**
-     * Default sprite loader. Subclasses (Archer, Mage, Beastman) 
-     * override this to load their specific PNGs.
-     */
     protected void loadSprites() {
         try {
             var walkRes = getClass().getResourceAsStream("/sprites/knight_walk.png");
@@ -85,7 +82,6 @@ public class Player {
     // ── Core Loop ────────────────────────────────────────────────────────────
 
     public void update(float dt, List<Rectangle> solidTiles) {
-        // Physics update (Includes PB-007 Coyote Time/Jump Buffer)
         physics.update(dt, bounds, solidTiles, GameWindow.WIDTH, GameWindow.HEIGHT);
 
         if (isAttacking) {
@@ -96,7 +92,6 @@ public class Player {
     }
 
     protected void updateWalkAnimation() {
-        // Reset attack frames while walking
         attackFrameIndex = 0;
         attackAnimTick = 0;
 
@@ -123,9 +118,13 @@ public class Player {
     }
 
     public void render(Graphics2D g) {
-        BufferedImage currentFrame = null;
+        // Visual indicator for I-Frames (Blue tint)
+        if (invincible) {
+            g.setColor(new Color(100, 200, 255, 80));
+            g.fillOval(bounds.x - 5, bounds.y - 5, width + 10, height + 10);
+        }
 
-        // Choose frame based on state
+        BufferedImage currentFrame = null;
         if (isAttacking && attackFrames != null) {
             currentFrame = attackFrames[attackFrameIndex];
         } else if (walkFrames != null) {
@@ -140,9 +139,11 @@ public class Player {
             }
         }
         
-        // PB-012/PB-017 Debug: Show melee hitbox for melee classes only
-        // This keeps the screen clear for the Archer and Mage projectiles.
-        if (isAttacking && (this instanceof Beastman || !(this instanceof Archer || this instanceof Mage))) {
+        // Debug Hitbox: Show for Knight, Beastman, and Samurai
+        boolean isMelee = (this instanceof Samurai || this instanceof Beastman || 
+                          !(this instanceof Archer || this instanceof Mage));
+        
+        if (isAttacking && isMelee) {
             g.setColor(new Color(255, 0, 0, 100));
             g.fillRect(attackHitbox.x, attackHitbox.y, attackHitbox.width, attackHitbox.height);
         }
@@ -151,18 +152,17 @@ public class Player {
     // ── Actions & Systems ────────────────────────────────────────────────────
 
     public void takeDamage(int amount) {
+        // PB-018: Samurai I-Frame check
+        if (invincible) return;
+
         health -= amount;
         if (health < 0) health = 0;
-        
-        if (health == 0) {
-            respawn();
-        }
+        if (health == 0) respawn();
     }
 
     public void respawn() {
         health = maxHealth;
         resetPosition(100, 200);
-        System.out.println("[System] Player Respawned.");
     }
 
     public void resetPosition(int x, int y) {
@@ -181,7 +181,6 @@ public class Player {
             attackAnimTick = 0;
             updateHitbox();
 
-            // Handle the attack duration in a background thread
             new Thread(() -> {
                 try {
                     Thread.sleep(attackDurationMs);
@@ -193,10 +192,6 @@ public class Player {
         }
     }
 
-    /**
-     * PB-012/PB-017: Melee collision area.
-     * Beastman overrides this for shorter, rapid swipes.
-     */
     protected void updateHitbox() {
         int hbW = 60; 
         int hbH = 45;

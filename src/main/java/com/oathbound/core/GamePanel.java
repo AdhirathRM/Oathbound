@@ -12,6 +12,10 @@ import java.awt.RenderingHints;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * GamePanel: The central engine for Oathbound.
+ * Supports Knight, Archer, and Mage (PB-016) across 9 Levels (PB-019).
+ */
 public class GamePanel extends JPanel implements Runnable {
 
     private static final int    TARGET_FPS         = 60;
@@ -29,13 +33,15 @@ public class GamePanel extends JPanel implements Runnable {
     // Entities
     private final List<Projectile> projectiles = new ArrayList<>();
     private final List<Enemy> enemies = new ArrayList<>();
-    private long lastFireTime = 0;
-    private final long FIRE_COOLDOWN = 400;
 
-    // PB-019 & PB-020: Level Management
+    // Level & Checkpoint Management
     private int currentLevel = 1;
     private final int MAX_LEVELS = 9;
     private VowStone currentVowStone;
+
+    // PB-016: Visual Explosion Feedback
+    private int explosionX, explosionY;
+    private int explosionTimer = 0;
 
     public GamePanel() {
         setPreferredSize(new Dimension(GameWindow.WIDTH, GameWindow.HEIGHT));
@@ -43,9 +49,9 @@ public class GamePanel extends JPanel implements Runnable {
         setDoubleBuffered(true);   
         setFocusable(true);        
         
-        player = new Archer(100, 200, projectiles); 
+        // PB-016: Currently playing as the Mage
+        player = new Mage(100, 200, projectiles); 
         
-        // Load the first level instead of hardcoding
         loadLevel(currentLevel);
 
         addKeyListener(new java.awt.event.KeyAdapter() {
@@ -58,14 +64,6 @@ public class GamePanel extends JPanel implements Runnable {
                 if (code == java.awt.event.KeyEvent.VK_LEFT)  player.setLeft(true);
                 if (code == java.awt.event.KeyEvent.VK_RIGHT) player.setRight(true);
                 if (code == java.awt.event.KeyEvent.VK_Z)     player.attack();
-
-                if (code == java.awt.event.KeyEvent.VK_X) {
-                    long currentTime = System.currentTimeMillis();
-                    if (currentTime - lastFireTime >= FIRE_COOLDOWN) {
-                        fireProjectile();
-                        lastFireTime = currentTime;
-                    }
-                }
                 
                 if (code == java.awt.event.KeyEvent.VK_ENTER && currentState == GameState.MENU) {
                     setGameState(GameState.PLAY);
@@ -84,14 +82,11 @@ public class GamePanel extends JPanel implements Runnable {
         currentState = GameState.MENU; 
     }
 
-    /**
-     * PB-019: Level Manager
-     * Clears old entities, loads the new map, and spawns level-specific objects.
-     */
     private void loadLevel(int levelNumber) {
-        System.out.println("[PB-019] Loading Level " + levelNumber);
+        System.out.println("[System] Loading Level " + levelNumber);
         projectiles.clear();
         enemies.clear();
+        explosionTimer = 0;
 
         tileMap.load("/levels/level_" + levelNumber + ".txt");
 
@@ -99,26 +94,15 @@ public class GamePanel extends JPanel implements Runnable {
             player.resetPosition(100, 200);
         }
 
-        // Hardcoded Level Design (Spawns)
+        // Logic for spawning Level Entities
         if (levelNumber == 1) {
             currentVowStone = new VowStone(1100, 544); 
             enemies.add(new Enemy(600, 200));
-        } else if (levelNumber == 2) {
+            enemies.add(new Enemy(660, 200)); // Grouped for AOE testing
+        } else {
             currentVowStone = new VowStone(1100, 544);
             enemies.add(new Enemy(500, 200));
-            enemies.add(new Enemy(900, 200));
-        } else {
-            // Default fallback for levels 3-9 if you haven't placed entities yet
-            currentVowStone = new VowStone(1100, 544);
         }
-    }
-
-    private void fireProjectile() {
-        float speed = 650f;
-        int pX = player.getBounds().x + (player.getBounds().width / 2);
-        int pY = player.getBounds().y + (player.getBounds().height / 3);
-        int direction = player.getFacing(); 
-        projectiles.add(new Projectile(pX, pY, speed * direction, 0));
     }
 
     public void startGameLoop() {
@@ -126,9 +110,7 @@ public class GamePanel extends JPanel implements Runnable {
         gameThread.start();
     }
 
-    public void stopGameLoop() {
-        gameThread = null;
-    }
+    public void stopGameLoop() { gameThread = null; }
 
     @Override
     public void run() {
@@ -137,10 +119,8 @@ public class GamePanel extends JPanel implements Runnable {
             long now = System.nanoTime();
             deltaTime = (now - lastFrameTime) / (double) ONE_BILLION;
             lastFrameTime = now;
-
             update(deltaTime);
             repaint();
-
             long sleepNanos = (long) NANOSECONDS_PER_FRAME - (System.nanoTime() - now);
             if (sleepNanos > 0) {
                 try { Thread.sleep(sleepNanos / 1_000_000, (int) (sleepNanos % 1_000_000)); } 
@@ -150,28 +130,23 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void update(double dt) {
-        if (currentState == GameState.PLAY) {
-            updatePlay(dt);
-        }
+        if (currentState == GameState.PLAY) updatePlay(dt);
     }
 
     private void updatePlay(double dt) {
         if (player != null) {
             player.update((float) dt, tileMap.getSolidTiles());
 
-            // PB-021: Pit Detection (Death by falling)
+            // PB-021: Fall Detection
             if (player.getBounds().y > GameWindow.HEIGHT) {
-                System.out.println("[PB-021] Player fell into a pit!");
-                // You can add player.takeDamage(1) here if you want pits to hurt
+                player.takeDamage(1); // Optional: Pits hurt!
                 player.resetPosition(100, 200); 
             }
 
-            // PB-020 & PB-019: Check if player touched the Vow Stone
+            // PB-020: Checkpoint/Next Level
             if (currentVowStone != null && currentVowStone.checkCollision(player.getBounds())) {
-                System.out.println("[PB-020] Vow Stone activated!");
                 currentLevel++;
                 if (currentLevel > MAX_LEVELS) {
-                    System.out.println("VICTORY! All levels completed.");
                     currentState = GameState.MENU; 
                     currentLevel = 1;
                 } else {
@@ -187,7 +162,7 @@ public class GamePanel extends JPanel implements Runnable {
             if (!p.isActive()) projectiles.remove(i);
         }
 
-        // Update Enemies & Combat Checks
+        // Update Enemies & Combat
         for (int i = enemies.size() - 1; i >= 0; i--) {
             Enemy enemy = enemies.get(i);
             enemy.update((float) dt, tileMap.getSolidTiles());
@@ -197,18 +172,36 @@ public class GamePanel extends JPanel implements Runnable {
                 continue;
             }
 
-            // Arrow Collision
+            // Projectile Logic
             for (Projectile p : projectiles) {
                 if (p.isActive() && p.getBounds().intersects(enemy.getBounds())) {
-                    enemy.takeDamage(1);
+                    if (p.isAOE()) {
+                        triggerExplosion(p);
+                    } else {
+                        enemy.takeDamage(1);
+                    }
                     p.deactivate();
+                    break; 
                 }
             }
+        }
 
-            // Melee Collision
-            Rectangle pAttack = player.getAttackHitbox();
-            if (pAttack != null && pAttack.intersects(enemy.getBounds())) {
-                enemy.takeDamage(1);
+        // Decay the visual explosion timer
+        if (explosionTimer > 0) explosionTimer--;
+    }
+
+    private void triggerExplosion(Projectile p) {
+        explosionX = (int)p.getBounds().getCenterX();
+        explosionY = (int)p.getBounds().getCenterY();
+        explosionTimer = 12; // Show blast for 12 frames (~0.2 seconds)
+
+        for (Enemy e : enemies) {
+            double dx = explosionX - e.getBounds().getCenterX();
+            double dy = explosionY - e.getBounds().getCenterY();
+            double distance = Math.sqrt(dx*dx + dy*dy);
+
+            if (distance <= p.getExplosionRadius()) {
+                e.takeDamage(2); 
             }
         }
     }
@@ -240,13 +233,20 @@ public class GamePanel extends JPanel implements Runnable {
         g.fillRect(0, 0, GameWindow.WIDTH, GameWindow.HEIGHT);
 
         tileMap.render(g);
-
         if (currentVowStone != null) currentVowStone.render(g);
         for (Enemy e : enemies) e.render(g);
         for (Projectile p : projectiles) p.render(g);
         
-        if (player != null) player.render(g);
+        // PB-016: Render the Mana Burst Visual
+        if (explosionTimer > 0) {
+            g.setColor(new Color(0, 200, 255, 100)); // Transparent Blue
+            int radius = 130; 
+            g.fillOval(explosionX - radius, explosionY - radius, radius * 2, radius * 2);
+            g.setColor(new Color(255, 255, 255, 150)); // White Flash center
+            g.fillOval(explosionX - 20, explosionY - 20, 40, 40);
+        }
 
+        if (player != null) player.render(g);
         hud.render(g, player); 
     }
 

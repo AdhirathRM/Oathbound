@@ -4,184 +4,124 @@ import java.awt.Rectangle;
 import java.util.List;
 
 /**
- * PB-002 — Gravity System
- *
- * A self-contained physics component that can be attached to any entity
- * (Player, Enemy, etc.) that needs gravity and vertical collision.
- *
- * Design — composition over inheritance:
- *   Each entity owns one PhysicsComponent. This keeps physics logic
- *   in one place and out of the class hierarchy, making PB-008 (abstract
- *   Player) cleaner when that sprint arrives.
- *
- * Acceptance criteria (PB-002):
- *   ✔ Entity accelerates downward each frame (gravity applied to velocityY)
- *   ✔ Landing on a solid tile stops falling (velocityY zeroed, onGround = true)
- *   ✔ Terminal velocity capped (MAX_FALL_SPEED)
- *
- * PB-003 hook:
- *   jump() is defined here so PB-003 can call it without coupling to a
- *   specific entity class. The jump method checks onGround before applying
- *   upward velocity, giving the correct arc when combined with gravity.
+ * PB-002, PB-003, PB-007 — Advanced Physics Component
+ * Now includes Coyote Time and Jump Buffering for "Pro" game feel.
  */
 public class PhysicsComponent {
 
-    // ── Physics Constants ─────────────────────────────────────────────────────
-
-    /** Downward acceleration in pixels per second². Tweak for game feel. */
+    // ── Constants ─────────────────────────────────────────────────────────────
     public static final float GRAVITY         = 1400f;
-
-    /** Maximum downward speed in pixels per second (terminal velocity). */
     public static final float MAX_FALL_SPEED  = 900f;
-
-    /** Upward velocity applied on jump (PB-003). Negative = up in screen space. */
     public static final float JUMP_VELOCITY   = -620f;
 
+    // PB-007 Juice Constants (in milliseconds)
+    private static final long COYOTE_TIME_MS   = 150; 
+    private static final long JUMP_BUFFER_MS   = 150; 
+
     // ── State ─────────────────────────────────────────────────────────────────
-
-    /** Current horizontal velocity in px/s. Set externally by movement code. */
     public float velocityX = 0f;
-
-    /** Current vertical velocity in px/s. Negative = moving up. */
     public float velocityY = 0f;
-
-    /** True when the entity is resting on a solid surface this frame. */
     private boolean onGround = false;
 
-    // ── Public API ────────────────────────────────────────────────────────────
+    // PB-007 Timers
+    private long lastTimeOnGround = 0;
+    private long lastJumpPressTime = 0;
 
-    /**
-     * Applies gravity, moves the entity bounds, then resolves collisions
-     * against the solid tile list produced by {@link TileMapLoader}.
-     *
-     * Call order inside GamePanel.updatePlay():
-     *   1. physics.update(dt, bounds, solidTiles)
-     *   2. Use bounds.x / bounds.y as the entity's new world position.
-     *
-     * @param dt         delta-time in seconds (from the game loop)
-     * @param bounds     the entity's current world-space rectangle;
-     *                   x and y are mutated in place
-     * @param solidTiles collision rectangles from TileMapLoader
-     */
-    public void update(float dt, Rectangle bounds, List<Rectangle> solidTiles) {
-        update(dt, bounds, solidTiles, 1280, 720);
-    }
+    public void update(float dt, Rectangle bounds, List<Rectangle> solidTiles, int screenW, int screenH) {
 
-    /**
-     * Overload that also clamps the entity to the screen boundaries.
-     *
-     * @param screenW  screen width  in pixels (GameWindow.WIDTH)
-     * @param screenH  screen height in pixels (GameWindow.HEIGHT)
-     */
-    public void update(float dt, Rectangle bounds, List<Rectangle> solidTiles,
-                       int screenW, int screenH) {
-
-        // ── 1. Apply gravity ──────────────────────────────────────────────────
+        // 1. Apply gravity
         velocityY += GRAVITY * dt;
         if (velocityY > MAX_FALL_SPEED) velocityY = MAX_FALL_SPEED;
 
-        // ── 2. Move vertically, then resolve vertical collisions ──────────────
-        //
-        // FIX (intermittent jump): We snap the player DOWN by 1 pixel before
-        // checking so that floating-point rounding can't leave the player 1 px
-        // above the tile surface where onGround would never be set.
-        // We then probe for ground contact BEFORE moving so that landing is
-        // detected on the very frame the player comes to rest.
+        // 2. Ground Probe (Existing logic)
         onGround = false;
-
-        // Ground-probe: peek 2px below current feet — if a tile is right there,
-        // we are standing on it regardless of velocityY (handles the case where
-        // the player is stationary and gravity hasn't produced a positive dy yet
-        // because last frame's collision zeroed it).
-        Rectangle groundProbe = new Rectangle(bounds.x + 2, bounds.y + bounds.height,
-                                               bounds.width - 4, 2);
+        Rectangle groundProbe = new Rectangle(bounds.x + 2, bounds.y + bounds.height, bounds.width - 4, 2);
         for (Rectangle tile : solidTiles) {
             if (groundProbe.intersects(tile)) {
                 onGround = true;
+                lastTimeOnGround = System.currentTimeMillis(); // Reset Coyote Timer
                 break;
             }
         }
 
+        // 3. Move Vertically & Resolve Collisions
         bounds.y += (int) (velocityY * dt);
+        resolveVerticalCollisions(bounds, solidTiles);
 
-        // Find the closest tile collision in the vertical axis (most overlap)
-        // so that corner-grazing a seam doesn't cause random non-collisions.
-        int     bestOverlap = 0;
-        Rectangle bestTile  = null;
+        // 4. Move Horizontally & Resolve Collisions
+        bounds.x += (int) (velocityX * dt);
+        resolveHorizontalCollisions(bounds, solidTiles);
+
+        // 5. Screen Clamping
+        clampToScreen(bounds, screenW, screenH);
+
+        // ── PB-007: THE JUICE LOGIC ──
+        checkBufferedJump();
+    }
+
+    private void checkBufferedJump() {
+        long now = System.currentTimeMillis();
+        
+        // Is the player within the Coyote Time window?
+        boolean canCoyoteJump = (now - lastTimeOnGround <= COYOTE_TIME_MS);
+        
+        // Did the player press jump recently?
+        boolean jumpBuffered = (now - lastJumpPressTime <= JUMP_BUFFER_MS);
+
+        if (jumpBuffered && canCoyoteJump) {
+            velocityY = JUMP_VELOCITY;
+            onGround = false;
+            
+            // CRITICAL: Clear timers so we don't double-jump
+            lastJumpPressTime = 0; 
+            lastTimeOnGround = 0; 
+        }
+    }
+
+    public boolean jump() {
+        // Instead of jumping instantly, we "buffer" the intent
+        lastJumpPressTime = System.currentTimeMillis();
+        return true; 
+    }
+
+    // ── Internal Helpers (Cleaned up from your original code) ────────────────
+
+    private void resolveVerticalCollisions(Rectangle bounds, List<Rectangle> solidTiles) {
+        Rectangle bestTile = null;
+        int bestOverlap = 0;
         for (Rectangle tile : solidTiles) {
             if (!bounds.intersects(tile)) continue;
-            int overlap = Math.min(bounds.y + bounds.height, tile.y + tile.height)
-                        - Math.max(bounds.y, tile.y);
+            int overlap = Math.min(bounds.y + bounds.height, tile.y + tile.height) - Math.max(bounds.y, tile.y);
             if (overlap > bestOverlap) { bestOverlap = overlap; bestTile = tile; }
         }
         if (bestTile != null) {
             if (velocityY >= 0) {
-                // Falling — land on top of tile
                 bounds.y = bestTile.y - bounds.height;
-                onGround  = true;
+                onGround = true;
+                lastTimeOnGround = System.currentTimeMillis();
             } else {
-                // Rising — hit the underside of a tile
                 bounds.y = bestTile.y + bestTile.height;
             }
             velocityY = 0f;
         }
+    }
 
-        // ── 3. Move horizontally, then resolve horizontal collisions ──────────
-        bounds.x += (int) (velocityX * dt);
-
+    private void resolveHorizontalCollisions(Rectangle bounds, List<Rectangle> solidTiles) {
         for (Rectangle tile : solidTiles) {
             if (!bounds.intersects(tile)) continue;
-
-            if (velocityX > 0) {
-                // Moving right — push left of tile
-                bounds.x = tile.x - bounds.width;
-            } else if (velocityX < 0) {
-                // Moving left — push right of tile
-                bounds.x = tile.x + tile.width;
-            }
+            if (velocityX > 0) bounds.x = tile.x - bounds.width;
+            else if (velocityX < 0) bounds.x = tile.x + tile.width;
             velocityX = 0f;
             break;
         }
-
-        // ── 4. Screen-boundary clamping ───────────────────────────────────────
-        // FIX (off-screen): clamp X so the player can't walk off either edge.
-        if (bounds.x < 0) {
-            bounds.x  = 0;
-            velocityX = 0f;
-        }
-        if (bounds.x + bounds.width > screenW) {
-            bounds.x  = screenW - bounds.width;
-            velocityX = 0f;
-        }
-        // Clamp Y: prevent falling off the bottom of the screen.
-        if (bounds.y + bounds.height > screenH) {
-            bounds.y  = screenH - bounds.height;
-            velocityY = 0f;
-            onGround  = true;
-        }
-        // Prevent going above the top of the screen.
-        if (bounds.y < 0) {
-            bounds.y  = 0;
-            velocityY = 0f;
-        }
     }
 
-    /**
-     * PB-003 hook — applies an upward impulse if the entity is on the ground.
-     * Returns true if the jump was actually performed (so callers can trigger
-     * a jump animation/SFX later).
-     *
-     * @return true if jump was applied, false if the entity was airborne
-     */
-    public boolean jump() {
-        if (onGround) {
-            velocityY = JUMP_VELOCITY;
-            onGround  = false;
-            return true;
-        }
-        return false;
+    private void clampToScreen(Rectangle bounds, int screenW, int screenH) {
+        if (bounds.x < 0) bounds.x = 0;
+        if (bounds.x + bounds.width > screenW) bounds.x = screenW - bounds.width;
+        if (bounds.y < 0) { bounds.y = 0; velocityY = 0; }
+        // Note: We don't clamp the bottom so PB-021 (Pit Detection) works!
     }
 
-    /** @return true if the entity is resting on solid ground this frame. */
     public boolean isOnGround() { return onGround; }
 }

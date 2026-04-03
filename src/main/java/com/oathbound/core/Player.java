@@ -9,13 +9,10 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * PB-008, PB-009 — Base Player Class
- * Optimized for Inheritance (PB-010) and Animation Priority.
+ * PB-008, PB-009, PB-014 — Base Player Class
+ * Now includes Health (PB-014) and Reset logic (PB-019/021).
  */
 public class Player {
-    // Add to Player.java fields
-    public int maxHealth = 3;
-    public int currentHealth = 3;
 
     // ── Dimensions ───────────────────────────────────────────────────────────
     protected final int width = 68;
@@ -24,6 +21,10 @@ public class Player {
     // ── Physics & Bounds ─────────────────────────────────────────────────────
     protected final Rectangle bounds;
     protected final PhysicsComponent physics;
+
+    // ── Health System (PB-014) ───────────────────────────────────────────────
+    protected int health = 5;
+    protected final int maxHealth = 5;
 
     // ── Animation Arrays ─────────────────────────────────────────────────────
     protected BufferedImage[] walkFrames;
@@ -41,7 +42,7 @@ public class Player {
     protected boolean isAttacking = false;
     protected int facing = 1; // 1 = Right, -1 = Left
     protected final Rectangle attackHitbox;
-    protected int attackDurationMs = 250; // Default for Knight; Archer overrides this
+    protected int attackDurationMs = 250; 
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
@@ -53,10 +54,6 @@ public class Player {
         loadSprites();
     }
 
-    /**
-     * Default sprite loader (Knight). 
-     * Archer class overrides this to load its own 68x68 sheets.
-     */
     protected void loadSprites() {
         try {
             var walkRes = getClass().getResourceAsStream("/sprites/knight_walk.png");
@@ -84,10 +81,8 @@ public class Player {
     // ── Core Loop ────────────────────────────────────────────────────────────
 
     public void update(float dt, List<Rectangle> solidTiles) {
-        // 1. Always update physics (allows jumping/moving while attacking)
         physics.update(dt, bounds, solidTiles, GameWindow.WIDTH, GameWindow.HEIGHT);
 
-        // 2. Animation State Priority
         if (isAttacking) {
             updateAttackAnimation();
         } else {
@@ -96,7 +91,6 @@ public class Player {
     }
 
     protected void updateWalkAnimation() {
-        // Reset attack frames so they start fresh next time
         attackFrameIndex = 0;
         attackAnimTick = 0;
 
@@ -112,24 +106,19 @@ public class Player {
     }
 
     protected void updateAttackAnimation() {
-        // Increment animation ticks
         attackAnimTick++;
         if (attackAnimTick >= attackAnimSpeed) {
             attackAnimTick = 0;
-            // Advance frame until the end of the sheet (index 6)
             if (attackFrameIndex < 6) {
                 attackFrameIndex++;
             }
         }
-        
-        // Update the collision hitbox (only relevant for Knight)
         updateHitbox();
     }
 
     public void render(Graphics2D g) {
         BufferedImage currentFrame = null;
 
-        // Determine which frame to draw
         if (isAttacking && attackFrames != null) {
             currentFrame = attackFrames[attackFrameIndex];
         } else if (walkFrames != null) {
@@ -140,28 +129,50 @@ public class Player {
             if (facing == 1) {
                 g.drawImage(currentFrame, bounds.x, bounds.y, width, height, null);
             } else {
-                // Flip horizontally for Left
                 g.drawImage(currentFrame, bounds.x + width, bounds.y, -width, height, null);
             }
         }
         
-        // PB-012 Debug: Show melee hitbox (Hidden for Archer)
-        if (isAttacking && !(this instanceof Archer)) {
+        // Debug Melee Hitbox
+        if (isAttacking && !(this instanceof Archer) && !(this instanceof Mage)) {
             g.setColor(new Color(255, 0, 0, 100));
             g.fillRect(attackHitbox.x, attackHitbox.y, attackHitbox.width, attackHitbox.height);
         }
     }
 
-    // ── Actions ──────────────────────────────────────────────────────────────
+    // ── Actions & Systems ────────────────────────────────────────────────────
+
+    public void takeDamage(int amount) {
+        health -= amount;
+        if (health < 0) health = 0;
+        System.out.println("[PB-014] Health: " + health + "/" + maxHealth);
+        
+        if (health == 0) {
+            respawn();
+        }
+    }
+
+    public void respawn() {
+        health = maxHealth;
+        resetPosition(100, 200);
+    }
+
+    public void resetPosition(int x, int y) {
+        this.bounds.x = x;
+        this.bounds.y = y;
+        if (physics != null) {
+            physics.velocityX = 0;
+            physics.velocityY = 0;
+        }
+    }
 
     public void attack() {
         if (!isAttacking) {
             isAttacking = true;
-            attackFrameIndex = 0;
+            attackFrameIndex = 0; 
             attackAnimTick = 0;
             updateHitbox();
 
-            // Handle state reset via thread
             new Thread(() -> {
                 try {
                     Thread.sleep(attackDurationMs);
@@ -173,7 +184,6 @@ public class Player {
         }
     }
 
-    //dynamic melee attack hitbox and visualization added for PB-012
     protected void updateHitbox() {
         int hbW = 60; 
         int hbH = 45;
@@ -199,20 +209,7 @@ public class Player {
     // ── Getters ──────────────────────────────────────────────────────────────
     public Rectangle getBounds() { return bounds; }
     public int getFacing() { return this.facing; }
-    
-    // Add this missing method right here:
-    public Rectangle getAttackHitbox() {
-        return isAttacking ? attackHitbox : null;
-    }
-    
-    /**
-     * PB-019 & PB-021: Resets the player's position and halts momentum.
-     * Used for loading new levels or recovering from a pit fall.
-     */
-    public void resetPosition(int x, int y) {
-        this.bounds.x = x;
-        this.bounds.y = y;
-        this.physics.velocityX = 0;
-        this.physics.velocityY = 0;
-    }
+    public Rectangle getAttackHitbox() { return attackHitbox; }
+    public int getHealth() { return health; }
+    public int getMaxHealth() { return maxHealth; }
 }

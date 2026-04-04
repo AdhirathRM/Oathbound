@@ -3,31 +3,21 @@ package com.oathbound.core;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
+import javax.imageio.ImageIO;
 
 /**
- * PB-004 — Tile-Map Loader
+ * PB-004 — Tile-Map Loader (Updated with Sprites & Dense Parsing)
  *
- * Parses a .txt level file from the res/levels/ directory and produces:
- *  - A 2D tile-ID grid (for rendering)
- *  - A flat list of solid collision rectangles (for PB-006)
- *  - A list of Vow Stone spawn positions (for PB-020)
- *
- * Tile key (matches level_test.txt):
- *   0  = air       — no collision, not rendered
- *   1  = ground    — solid, rendered dark grey
- *   2  = platform  — solid, rendered brown (one-way in future sprints)
- *   V  = Vow Stone — marks a checkpoint spawn; treated as air for collision
- *
- * Acceptance criteria (PB-004):
- *   - Loader parses a text file
- *   - Maps tile IDs to colours (sprites swapped in later)
- *   - Renders correct tile grid
- *   - No hard-coded coordinates
+ * Parses a dense .txt level file from the res/levels/ directory and produces:
+ * - A 2D tile-ID grid (for rendering)
+ * - A flat list of solid collision rectangles (for PB-006)
+ * - Dynamic spawn points for Vow Stones, Enemies, and Players
  */
 public class TileMapLoader {
 
@@ -40,39 +30,39 @@ public class TileMapLoader {
     public static final int TILE_AIR      = 0;
     public static final int TILE_GROUND   = 1;
     public static final int TILE_PLATFORM = 2;
-    public static final int TILE_VOW      = 9; // internal ID for 'V' tokens
+    public static final int TILE_TRAP     = 3;
+    public static final int TILE_ROCK     = 4;
+    public static final int TILE_VOW      = 9;
 
-    // Placeholder colours — replaced by sprites in a later sprint
+    // Placeholder colours — used if sprites fail to load
     private static final Color COLOR_GROUND   = new Color(60,  60,  60);
     private static final Color COLOR_PLATFORM = new Color(139, 90,  43);
-    private static final Color COLOR_VOW      = new Color(100, 180, 255);
 
     // ── Fields ───────────────────────────────────────────────────────────────
 
     /** Raw grid of tile IDs. [row][col] */
     private int[][] tileGrid;
-
     private int rows;
     private int cols;
+
+    /** Sprites */
+    private BufferedImage floorLeft, floorMid1, floorMid2, floorRight, spikeSprite;
 
     /** Solid rectangles used by the collision system (PB-006). */
     private final List<Rectangle> solidTiles = new ArrayList<>();
 
-    /** World-space positions of Vow Stone spawns (PB-020). */
+    /** World-space positions */
     private final List<int[]> vowStonePositions = new ArrayList<>();
+    private final List<int[]> enemyPositions = new ArrayList<>();
+    private int[] playerSpawn = new int[]{100, 200}; // Default fallback
 
     // ── Public API ───────────────────────────────────────────────────────────
 
-    /**
-     * Loads and parses a level file from the classpath.
-     *
-     * @param resourcePath path relative to classpath root,
-     *                     e.g. "/levels/level_test.txt"
-     * @throws RuntimeException if the file cannot be read or parsed
-     */
     public void load(String resourcePath) {
+        loadSprites();
         solidTiles.clear();
         vowStonePositions.clear();
+        enemyPositions.clear();
 
         List<int[]> rowList = new ArrayList<>();
 
@@ -83,32 +73,25 @@ public class TileMapLoader {
             int row = 0;
 
             while ((line = br.readLine()) != null) {
-                // Skip comment lines
                 if (line.startsWith("#") || line.isBlank()) continue;
 
-                String[] tokens = line.trim().split("\\s+");
-                int[] tileRow = new int[tokens.length];
+                // Dense parsing (no spaces)
+                line = line.replace(" ", "").trim();
+                int[] tileRow = new int[line.length()];
 
-                for (int col = 0; col < tokens.length; col++) {
-                    int tileId = parseToken(tokens[col]);
+                for (int col = 0; col < line.length(); col++) {
+                    char token = line.charAt(col);
+                    int tileId = parseToken(token, row, col);
                     tileRow[col] = tileId;
 
                     // Build collision rectangles for solid tiles
-                    if (tileId == TILE_GROUND || tileId == TILE_PLATFORM) {
+                    if (tileId == TILE_GROUND || tileId == TILE_PLATFORM || tileId == TILE_ROCK) {
                         solidTiles.add(new Rectangle(
-                                col  * TILE_SIZE,
-                                row  * TILE_SIZE,
+                                col * TILE_SIZE,
+                                row * TILE_SIZE,
                                 TILE_SIZE,
                                 TILE_SIZE
                         ));
-                    }
-
-                    // Record Vow Stone world positions
-                    if (tileId == TILE_VOW) {
-                        vowStonePositions.add(new int[]{
-                                col * TILE_SIZE,
-                                row * TILE_SIZE
-                        });
                     }
                 }
 
@@ -120,57 +103,78 @@ public class TileMapLoader {
             throw new RuntimeException("TileMapLoader: failed to load " + resourcePath, e);
         }
 
-        // Convert list → 2D array
         rows = rowList.size();
         cols = rowList.isEmpty() ? 0 : rowList.get(0).length;
         tileGrid = rowList.toArray(new int[0][]);
 
         System.out.printf("[TileMapLoader] Loaded %s — %d rows × %d cols, " +
-                          "%d solid tiles, %d Vow Stones%n",
+                          "%d solid tiles, %d Enemies, %d Vow Stones%n",
                 resourcePath, rows, cols,
-                solidTiles.size(), vowStonePositions.size());
+                solidTiles.size(), enemyPositions.size(), vowStonePositions.size());
     }
 
-    /**
-     * Renders the tile grid.
-     * Air tiles are skipped (background shows through).
-     * Sprites should replace the colour fills in a later sprint.
-     *
-     * @param g   the Graphics2D context provided by GamePanel
-     */
     public void render(Graphics2D g) {
         if (tileGrid == null) return;
 
         for (int row = 0; row < rows; row++) {
             for (int col = 0; col < cols; col++) {
                 int id = tileGrid[row][col];
-
-                Color fill = colorForTile(id);
-                if (fill == null) continue; // TILE_AIR — skip
+                if (id == TILE_AIR) continue;
 
                 int x = col * TILE_SIZE;
                 int y = row * TILE_SIZE;
 
-                g.setColor(fill);
-                g.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-
-                // Subtle border so individual tiles are visible
-                g.setColor(fill.darker());
-                g.drawRect(x, y, TILE_SIZE, TILE_SIZE);
+                if (id == TILE_GROUND) {
+                    boolean hasLeft  = col > 0      && tileGrid[row][col-1] == TILE_GROUND;
+                    boolean hasRight = col < cols-1 && tileGrid[row][col+1] == TILE_GROUND;
+                    
+                    BufferedImage sprite;
+                    if (!hasLeft && hasRight)      sprite = floorLeft;
+                    else if (hasLeft && !hasRight) sprite = floorRight;
+                    else if (!hasLeft)             sprite = floorMid1; // Isolated tile
+                    else sprite = (col % 2 == 0)  ? floorMid1 : floorMid2; // Middle tiles
+                    
+                    if (sprite != null) {
+                        g.drawImage(sprite, x, y, null);
+                    } else {
+                        g.setColor(COLOR_GROUND); 
+                        g.fillRect(x, y, TILE_SIZE, TILE_SIZE); 
+                    }
+                }
+                else if (id == TILE_TRAP) {
+                    if (spikeSprite != null) {
+                        g.drawImage(spikeSprite, x, y, null);
+                    } else {
+                        g.setColor(Color.RED); 
+                        g.fillRect(x, y, TILE_SIZE, TILE_SIZE); 
+                    }
+                }
+                else if (id == TILE_PLATFORM) {
+                    g.setColor(COLOR_PLATFORM); g.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                }
+                else if (id == TILE_ROCK) {
+                    g.setColor(Color.GRAY); g.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                }
             }
         }
     }
 
     // ── Getters ──────────────────────────────────────────────────────────────
 
-    /** @return unmodifiable view of solid collision rectangles (used by PB-006). */
     public List<Rectangle> getSolidTiles() {
         return java.util.Collections.unmodifiableList(solidTiles);
     }
 
-    /** @return list of [x, y] world positions for each Vow Stone (used by PB-020). */
     public List<int[]> getVowStonePositions() {
         return java.util.Collections.unmodifiableList(vowStonePositions);
+    }
+    
+    public List<int[]> getEnemyPositions() { 
+        return enemyPositions; 
+    }
+    
+    public int[] getPlayerSpawn() { 
+        return playerSpawn; 
     }
 
     public int getRows()     { return rows; }
@@ -179,27 +183,47 @@ public class TileMapLoader {
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    /**
-     * Converts a string token from the level file to an integer tile ID.
-     * 'V' → TILE_VOW; numeric strings parsed normally; unknown → TILE_AIR.
-     */
-    private int parseToken(String token) {
-        if (token.equalsIgnoreCase("V")) return TILE_VOW;
+    private void loadSprites() {
+        floorLeft   = loadImage("/sprites/floor_tile_1.png");
+        floorMid1   = loadImage("/sprites/floor_tile_2.png");
+        floorMid2   = loadImage("/sprites/floor_tile_3.png");
+        floorRight  = loadImage("/sprites/floor_tile_4.png");
+        spikeSprite = loadImage("/sprites/spikes.png");
+    }
+
+    private BufferedImage loadImage(String path) {
         try {
-            return Integer.parseInt(token);
-        } catch (NumberFormatException e) {
-            System.err.println("[TileMapLoader] Unknown token '" + token + "' — treated as air.");
-            return TILE_AIR;
+            InputStream is = getClass().getResourceAsStream(path);
+            if (is == null) { 
+                System.err.println("[TileMapLoader] Missing: " + path); 
+                return null; 
+            }
+            return ImageIO.read(is);
+        } catch (Exception e) { 
+            e.printStackTrace(); 
+            return null; 
         }
     }
 
-    /** Maps a tile ID to its placeholder fill colour. Returns null for air. */
-    private Color colorForTile(int id) {
-        switch (id) {
-            case TILE_GROUND:   return COLOR_GROUND;
-            case TILE_PLATFORM: return COLOR_PLATFORM;
-            case TILE_VOW:      return COLOR_VOW;
-            default:            return null; // air
+    private int parseToken(char token, int row, int col) {
+        int xPos = col * TILE_SIZE;
+        int yPos = row * TILE_SIZE;
+        
+        switch (token) {
+            case '1': return TILE_GROUND;
+            case '2': return TILE_PLATFORM;
+            case 'R': return TILE_ROCK;
+            case 'T': return TILE_TRAP;
+            case 'V': case 'v':
+                vowStonePositions.add(new int[]{xPos, yPos});
+                return TILE_AIR;
+            case 'E': case 'e':
+                enemyPositions.add(new int[]{xPos, yPos});
+                return TILE_AIR;
+            case 'P': case 'p':
+                playerSpawn = new int[]{xPos, yPos};
+                return TILE_AIR;
+            default: return TILE_AIR;
         }
     }
 }

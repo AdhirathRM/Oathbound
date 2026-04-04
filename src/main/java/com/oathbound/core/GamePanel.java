@@ -28,6 +28,10 @@ public class GamePanel extends JPanel implements Runnable {
 
     private final TileMapLoader tileMap = new TileMapLoader();
     
+    // Background & Camera Layers
+    private java.awt.image.BufferedImage bgLayer1, bgLayer2, bgLayer3;
+    private float camX = 0;
+
     // PB-015: Roster Management
     private Player player; 
     private final List<Player> roster = new ArrayList<>();
@@ -61,6 +65,7 @@ public class GamePanel extends JPanel implements Runnable {
         roster.add(new Samurai(100, 200));
         
         player = roster.get(currentHeroIndex);
+        loadBackground();
         loadLevel(currentLevel);
 
         addKeyListener(new java.awt.event.KeyAdapter() {
@@ -96,6 +101,21 @@ public class GamePanel extends JPanel implements Runnable {
         this.requestFocusInWindow();
     }
 
+    private void loadBackground() {
+        bgLayer1 = loadBgImage("/sprites/layer_1.png"); // sky/moon
+        bgLayer2 = loadBgImage("/sprites/layer_2.png"); // castle
+        bgLayer3 = loadBgImage("/sprites/layer_3.png"); // dirt strip
+    }
+
+    private java.awt.image.BufferedImage loadBgImage(String path) {
+        try {
+            java.io.InputStream is = getClass().getResourceAsStream(path);
+            return is != null ? javax.imageio.ImageIO.read(is) : null;
+        } catch (Exception e) { 
+            return null; 
+        }
+    }
+
     private void swapHero() {
         System.out.println("[DEBUG] Swapping Hero... Current: " + player.getClass().getSimpleName());
         
@@ -122,16 +142,20 @@ public class GamePanel extends JPanel implements Runnable {
         explosionTimer = 0;
         tileMap.load("/levels/level_" + levelNumber + ".txt");
 
-        for (Player p : roster) {
-            p.resetPosition(100, 200);
+        // Use P spawn from map, fall back to (100, 200)
+        int[] spawn = tileMap.getPlayerSpawn();
+        for (Player p : roster) p.resetPosition(spawn[0], spawn[1]);
+
+        // Spawn enemies from E tokens in the map
+        for (int[] pos : tileMap.getEnemyPositions()) {
+            enemies.add(new Enemy(pos[0], pos[1]));
         }
 
-        if (levelNumber == 1) {
-            currentVowStone = new VowStone(1100, 544); 
-            enemies.add(new Enemy(600, 200));
-        } else {
-            currentVowStone = new VowStone(1100, 544);
-        }
+        // Vow Stone from V token (use first one found, or fallback)
+        List<int[]> vows = tileMap.getVowStonePositions();
+        currentVowStone = vows.isEmpty()
+            ? new VowStone(1100, 544)
+            : new VowStone(vows.get(0)[0], vows.get(0)[1]);
     }
 
     public void startGameLoop() {
@@ -167,9 +191,13 @@ public class GamePanel extends JPanel implements Runnable {
         if (player != null) {
             player.update((float) dt, tileMap.getSolidTiles());
 
+            // Parallax scroll ties to player's world position
+            camX = player.getBounds().x;
+
             if (player.getBounds().y > GameWindow.HEIGHT) {
                 player.takeDamage(1);
-                player.resetPosition(100, 200); 
+                int[] spawn = tileMap.getPlayerSpawn();
+                player.resetPosition(spawn[0], spawn[1]); 
             }
 
             if (currentVowStone != null && currentVowStone.checkCollision(player.getBounds())) {
@@ -240,9 +268,10 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void renderPlay(Graphics2D g) {
-        g.setColor(new Color(30, 30, 35));
-        g.fillRect(0, 0, GameWindow.WIDTH, GameWindow.HEIGHT);
-        tileMap.render(g);
+        drawBackground(g);  // 1. sky, then castles, then dirt strip
+        
+        tileMap.render(g);  // 2. actual solid ground tiles ON TOP of background
+        
         if (currentVowStone != null) currentVowStone.render(g);
         for (Enemy e : enemies) e.render(g);
         for (Projectile p : projectiles) p.render(g);
@@ -255,6 +284,47 @@ public class GamePanel extends JPanel implements Runnable {
 
         if (player != null) player.render(g);
         hud.render(g, player); 
+    }
+    
+    private void drawBackground(Graphics2D g) {
+        int w = getWidth();
+        int h = getHeight();
+
+        // Layer 1: Sky/moon — stretch to fill entire screen, NO tiling, NO scroll
+        if (bgLayer1 != null) {
+            g.drawImage(bgLayer1, 0, 0, w, h, null);
+        }
+
+        // Layer 2: Castle buildings — tile horizontally, sits at the BOTTOM of screen
+        // slow parallax scroll
+        if (bgLayer2 != null) {
+            int imgW = bgLayer2.getWidth();
+            int imgH = bgLayer2.getHeight();
+            
+            float scale = 2.5f; // increase this to make buildings bigger
+            int drawW = (int)(imgW * scale);
+            int drawH = (int)(imgH * scale);
+            int drawY = h - drawH; // still pinned to bottom
+            
+            int offsetX = -(int)(camX * 0.2f) % drawW;
+            if (offsetX > 0) offsetX -= drawW;
+            for (int x = offsetX; x < w; x += drawW) {
+                g.drawImage(bgLayer2, x, drawY, drawW, drawH, null);
+            }
+        }
+
+        // Layer 3: Dirt/ground strip — tile horizontally, sits just above tile ground
+        // faster parallax scroll
+        if (bgLayer3 != null) {
+            int imgW = bgLayer3.getWidth();
+            int imgH = bgLayer3.getHeight();
+            int drawY = h - imgH; // also pins to bottom, overlaps castle base
+            int offsetX = -(int)(camX * 0.5f) % imgW;
+            if (offsetX > 0) offsetX -= imgW;
+            for (int x = offsetX; x < w; x += imgW) {
+                g.drawImage(bgLayer3, x, drawY, null);
+            }
+        }
     }
 
     public void setGameState(GameState newState) { this.currentState = newState; }

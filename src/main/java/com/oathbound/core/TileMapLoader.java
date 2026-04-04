@@ -32,7 +32,15 @@ public class TileMapLoader {
     public static final int TILE_PLATFORM = 2;
     public static final int TILE_TRAP     = 3;
     public static final int TILE_ROCK     = 4;
-    public static final int TILE_VOW      = 9;
+    public static final int TILE_VOW = 9;
+    // New tile ID constants
+    public static final int TILE_WALL        = 5;  // token 'W' — vertical wall bricks
+    public static final int TILE_COLUMN      = 6;  // token 'C' — decorative column
+    public static final int TILE_PLATFORM_L  = 7;  // token 'L' — platform left cap
+    public static final int TILE_PLATFORM_R  = 8;  // token 'X' — platform right cap
+    public static final int TILE_PLATFORM_M  = 10; // token 'M' — platform middle
+    public static final int TILE_DAMAGED     = 11; // token 'D' — damaged brick
+    public static final int TILE_STAIR       = 12; // token 'S' — stair tile
 
     // Placeholder colours — used if sprites fail to load
     private static final Color COLOR_GROUND   = new Color(60,  60,  60);
@@ -47,6 +55,9 @@ public class TileMapLoader {
 
     /** Sprites */
     private BufferedImage floorLeft, floorMid1, floorMid2, floorRight, spikeSprite;
+    private BufferedImage wallSprite, columnSprite;
+    private BufferedImage platformLeft, platformRight, platformMid, platformShadow;
+    private BufferedImage damagedSprite, stairSprite;
 
     /** Solid rectangles used by the collision system (PB-006). */
     private final List<Rectangle> solidTiles = new ArrayList<>();
@@ -85,7 +96,10 @@ public class TileMapLoader {
                     tileRow[col] = tileId;
 
                     // Build collision rectangles for solid tiles
-                    if (tileId == TILE_GROUND || tileId == TILE_PLATFORM || tileId == TILE_ROCK) {
+                    if (tileId == TILE_GROUND || tileId == TILE_PLATFORM || tileId == TILE_ROCK
+ || tileId == TILE_WALL   || tileId == TILE_COLUMN   || tileId == TILE_DAMAGED
+ || tileId == TILE_STAIR  || tileId == TILE_PLATFORM_L || tileId == TILE_PLATFORM_M
+ || tileId == TILE_PLATFORM_R) {
                         solidTiles.add(new Rectangle(
                                 col * TILE_SIZE,
                                 row * TILE_SIZE,
@@ -153,7 +167,36 @@ public class TileMapLoader {
                     g.setColor(COLOR_PLATFORM); g.fillRect(x, y, TILE_SIZE, TILE_SIZE);
                 }
                 else if (id == TILE_ROCK) {
-                    g.setColor(Color.GRAY); g.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                    g.setColor(Color.GRAY);
+                    g.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                }
+                else if (id == TILE_WALL) {
+                    if (wallSprite != null) g.drawImage(wallSprite, x, y, null);
+                    else { g.setColor(new Color(80,80,80)); g.fillRect(x, y, TILE_SIZE, TILE_SIZE); }
+                }
+                else if (id == TILE_COLUMN) {
+                    if (columnSprite != null) g.drawImage(columnSprite, x, y, null);
+                    else { g.setColor(new Color(100,100,100)); g.fillRect(x, y, TILE_SIZE, TILE_SIZE); }
+                }
+                else if (id == TILE_PLATFORM_L) {
+                    if (platformLeft != null) g.drawImage(platformLeft, x, y, null);
+                    if (platformShadow != null) g.drawImage(platformShadow, x, y + TILE_SIZE, null);
+                }
+                else if (id == TILE_PLATFORM_M) {
+                    if (platformMid != null) g.drawImage(platformMid, x, y, null);
+                    if (platformShadow != null) g.drawImage(platformShadow, x, y + TILE_SIZE, null);
+                }
+                else if (id == TILE_PLATFORM_R) {
+                    if (platformRight != null) g.drawImage(platformRight, x, y, null);
+                    if (platformShadow != null) g.drawImage(platformShadow, x, y + TILE_SIZE, null);
+                }
+                else if (id == TILE_DAMAGED) {
+                    if (damagedSprite != null) g.drawImage(damagedSprite, x, y, null);
+                    else { g.setColor(new Color(90,70,60)); g.fillRect(x, y, TILE_SIZE, TILE_SIZE); }
+                }
+                else if (id == TILE_STAIR) {
+                    if (stairSprite != null) g.drawImage(stairSprite, x, y, null);
+                    else { g.setColor(new Color(70,70,70)); g.fillRect(x, y, TILE_SIZE, TILE_SIZE); }
                 }
             }
         }
@@ -189,6 +232,14 @@ public class TileMapLoader {
         floorMid2   = loadImage("/sprites/floor_tile_3.png");
         floorRight  = loadImage("/sprites/floor_tile_4.png");
         spikeSprite = loadImage("/sprites/spikes.png");
+        wallSprite     = loadImage("/sprites/wall_1.png");
+        columnSprite   = loadImage("/sprites/column_1.png");
+        platformLeft   = loadImage("/sprites/platform_1.png");   // left cap
+        platformMid    = loadImage("/sprites/platform_2.png");   // middle fill
+        platformRight  = loadImage("/sprites/platform_3.png");   // right cap
+        platformShadow = loadImage("/sprites/platform_shadow.png");
+        damagedSprite  = loadImage("/sprites/damaged_brick_1.png");
+        stairSprite    = loadImage("/sprites/stairs_tile_1.png");
     }
 
     private BufferedImage loadImage(String path) {
@@ -212,6 +263,13 @@ public class TileMapLoader {
         switch (token) {
             case '1': return TILE_GROUND;
             case '2': return TILE_PLATFORM;
+            case 'W': return TILE_WALL;
+            case 'C': return TILE_COLUMN;
+            case 'L': return TILE_PLATFORM_L;
+            case 'M': return TILE_PLATFORM_M;
+            case 'X': return TILE_PLATFORM_R;
+            case 'D': return TILE_DAMAGED;
+            case 'S': return TILE_STAIR;
             case 'R': return TILE_ROCK;
             case 'T': return TILE_TRAP;
             case 'V': case 'v':

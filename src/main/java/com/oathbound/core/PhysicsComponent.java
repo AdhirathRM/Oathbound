@@ -12,7 +12,7 @@ public class PhysicsComponent {
     // ── Constants ─────────────────────────────────────────────────────────────
     public static final float GRAVITY         = 1400f;
     public static final float MAX_FALL_SPEED  = 900f;
-    public static final float JUMP_VELOCITY   = -620f;
+    public static final float JUMP_VELOCITY   = -750f;
 
     // PB-007 Juice Constants (in milliseconds)
     private static final long COYOTE_TIME_MS   = 150; 

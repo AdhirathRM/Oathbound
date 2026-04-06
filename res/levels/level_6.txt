@@ -1,11 +1,6 @@
-# Level 6 — The Gauntlet Bridge
-# New mechanic: combines everything learned so far simultaneously.
-# Spikes directly under platforms — missing the platform = spike death.
-# Enemies on platforms force combat while balancing on 3-tile surfaces.
-# One section has a 6-tile gap (near-max horizontal jump, requires full run speed).
-# Mid-level there's a descending section then a climb — tests full moveset.
-# Vow Stone is guarded: enemy stands directly next to it on a 3-tile platform.
-# Width: 42 cols | Height: 22 rows
+#Level 6 — The Gauntlet Bridge
+
+#Long jumps, spike pits below small platforms.
 
 000000000000000000000000000000000000000000
 000000000000000000000000000000000000000000
@@ -23,9 +18,9 @@
 000000000001110000000000000000000000000000
 000000000000000000000000000000000000000000
 000000000000000000000000000000000000000000
-0P000000E000000000000E0000000000000000000E
+0P00000E00000000000E000000000000000000000E
 000000000000000000000000000000000000000000
-11111110000TTT0111110000TTT01111110000TTT01
-11111110TTTTTTT1111100TTTTTTT111110TTTTTTT1
+111111000TTT00111110000TTT0111110000TTT011
+1111110TTTTTT01111100TTTTTT1111100TTTTT011
 111111111111111111111111111111111111111111
 111111111111111111111111111111111111111111

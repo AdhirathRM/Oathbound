@@ -1,93 +1,116 @@
 package com.oathbound.core;
 
-import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.image.BufferedImage;
-import java.io.IOException;
-import javax.imageio.ImageIO;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.utils.TimeUtils;
+import java.awt.Rectangle;
+import java.util.List;
 
 /**
  * PB-018 — The Samurai Class
- * Features a Dash-Slash with I-Frames for defensive offense.
+ * Features a Dash-Slash with I-Frames. Thread.sleep completely removed!
  */
 public class Samurai extends Player {
 
-    private final float dashSpeed = 900f; // Rapid surge
-    private final long dashDuration = 200; // 0.2 seconds of pure speed/invincibility
+    private final float dashSpeed = 900f; 
+    private final float dashDurationSec = 0.2f; 
+    private final float customAttackDurationSec = 0.40f; 
+    
     private long lastDashTime = 0;
-    private final long dashCooldown = 800; // Prevents infinite dashing
+    private final long dashCooldown = 800; 
 
     public Samurai(int x, int y) {
         super(x, y);
-        this.attackDurationMs = 400; 
         this.attackAnimSpeed = 2;
         loadSprites();
     }
 
     @Override
     protected void loadSprites() {
-        try {
-            // Load Samurai Assets
-            var walkRes = getClass().getResourceAsStream("/sprites/samurai_walk.png");
-            if (walkRes != null) {
-                BufferedImage walkSheet = ImageIO.read(walkRes);
-                walkFrames = new BufferedImage[6];
-                for (int i = 0; i < 6; i++) walkFrames[i] = walkSheet.getSubimage(i * width, 0, width, height);
+        if (Gdx.files.internal("sprites/samurai_walk.png").exists()) {
+            walkSheet = new Texture(Gdx.files.internal("sprites/samurai_walk.png"));
+            walkFrames = new TextureRegion[6];
+            for (int i = 0; i < 6; i++) {
+                walkFrames[i] = new TextureRegion(walkSheet, i * width, 0, width, height);
+                walkFrames[i].flip(false, true);
             }
-            
-            var attackRes = getClass().getResourceAsStream("/sprites/samurai_attack.png");
-            if (attackRes != null) {
-                BufferedImage attackSheet = ImageIO.read(attackRes);
-                attackFrames = new BufferedImage[7];
-                for (int i = 0; i < 7; i++) attackFrames[i] = attackSheet.getSubimage(i * width, 0, width, height);
+        }
+        if (Gdx.files.internal("sprites/samurai_attack.png").exists()) {
+            attackSheet = new Texture(Gdx.files.internal("sprites/samurai_attack.png"));
+            attackFrames = new TextureRegion[7];
+            for (int i = 0; i < 7; i++) {
+                attackFrames[i] = new TextureRegion(attackSheet, i * width, 0, width, height);
+                attackFrames[i].flip(false, true);
             }
-        } catch (IOException e) {
-            System.err.println("[Samurai] Using default assets.");
         }
     }
 
     @Override
     public void attack() {
-        long now = System.currentTimeMillis();
+        long now = TimeUtils.millis();
         if (!isAttacking && (now - lastDashTime >= dashCooldown)) {
             isAttacking = true;
-            invincible = true; // PB-018: Trigger I-Frames
+            invincible = true; 
+            attackTimer = 0f; // Reset Web-Safe timer
             lastDashTime = now;
             attackFrameIndex = 0;
 
-            // Apply the dash force
+            // Apply the dash force instantly
             physics.velocityX = dashSpeed * facing;
+        }
+    }
+    
+    @Override
+    public void update(float dt, List<Rectangle> solidTiles) {
+        physics.update(dt, bounds, solidTiles, 1280, 736);
 
-            new Thread(() -> {
-                try {
-                    // Dash duration (Invincible phase)
-                    Thread.sleep(dashDuration);
-                    invincible = false; 
-                    physics.velocityX = 0; // Stop the surge
-
-                    // Remaining animation/recovery time
-                    Thread.sleep(attackDurationMs - dashDuration);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
+        if (isAttacking) {
+            attackTimer += dt;
+            
+            // 1. Check if the high-speed dash phase is over
+            if (attackTimer >= dashDurationSec && invincible) {
+                invincible = false;
+                physics.velocityX = 0f; // Stop the surge
+            }
+            
+            // 2. Check if the whole attack animation is over
+            if (attackTimer >= customAttackDurationSec) {
                 isAttacking = false;
-            }).start();
+                invincible = false; // Safety catch
+            }
+            updateAttackAnimation();
+        } else {
+            updateWalkAnimation();
         }
     }
 
     @Override
-    public void render(Graphics2D g) {
-        // PB-018 Visual: If invincible, draw with an after-image or blue tint
+    public void render(SpriteBatch batch) {
+        // PB-018 Visual: LibGDX native way to tint sprites!
+        // This is much cooler than drawing a blue box. It tints the actual samurai blue.
         if (invincible) {
-            g.setColor(new Color(100, 200, 255, 100)); // Blue ghost effect
-            g.fillRect(bounds.x - (facing * 20), bounds.y, width, height);
+            batch.setColor(0.4f, 0.8f, 1f, 0.6f); // Semi-transparent blue
+            
+            // Draw a ghost "after-image" lagging slightly behind
+            TextureRegion currentFrame = isAttacking ? attackFrames[attackFrameIndex] : walkFrames[frameIndex];
+            if (currentFrame != null) {
+                boolean needsFlip = (facing == -1);
+                if (currentFrame.isFlipX() != needsFlip) currentFrame.flip(true, false);
+                batch.draw(currentFrame, bounds.x - (facing * 20), bounds.y, width, height);
+            }
+            
+            // Reset color so the main body draws normally
+            batch.setColor(Color.WHITE); 
         }
-        super.render(g);
+        
+        super.render(batch);
     }
 
     @Override
     protected void updateHitbox() {
-        // Samurai has a long, narrow "Sheath Strike"
         int hbW = 85; 
         int hbH = 30;
         int hbX = (facing == 1) ? bounds.x + width - 10 : bounds.x - hbW + 10;

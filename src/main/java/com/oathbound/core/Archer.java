@@ -1,103 +1,87 @@
 package com.oathbound.core;
 
-import java.awt.image.BufferedImage;
-import java.io.IOException;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.utils.TimeUtils;
+import java.awt.Rectangle;
 import java.util.List;
-import javax.imageio.ImageIO;
 
 /**
  * PB-010 — The Archer Class
- * A playable subclass of Player. Fires arrows instead of melee swings.
+ * Ported to LibGDX. Replaced Thread.sleep with dt-based state management.
  */
 public class Archer extends Player {
 
     private final List<Projectile> projectileList;
     private long lastShotTime = 0;
     private final long SHOT_COOLDOWN = 600; 
-
-    // Increased duration to ensure 7 frames of animation finish and "hold" the pose
-    protected final int attackDurationMs = 450; 
+    
+    private final float customAttackDurationSec = 0.45f;
 
     public Archer(int x, int y, List<Projectile> gameProjectiles) {
         super(x, y); 
         this.projectileList = gameProjectiles;
-        
-        // Explicitly load Archer sprites to overwrite Knight defaults
         loadSprites(); 
     }
 
-    /**
-     * PB-010: Overrides the Knight's sprite loader with Archer-specific assets.
-     */
     @Override
     protected void loadSprites() {
-        try {
-            // Load Walking Sheet (408x68)
-            var walkRes = getClass().getResourceAsStream("/sprites/archer_walk.png");
-            if (walkRes != null) {
-                BufferedImage walkSheet = ImageIO.read(walkRes);
-                walkFrames = new BufferedImage[6];
-                for (int i = 0; i < 6; i++) {
-                    walkFrames[i] = walkSheet.getSubimage(i * width, 0, width, height);
-                }
+        if (Gdx.files.internal("sprites/archer_walk.png").exists()) {
+            walkSheet = new Texture(Gdx.files.internal("sprites/archer_walk.png"));
+            walkFrames = new TextureRegion[6];
+            for (int i = 0; i < 6; i++) {
+                walkFrames[i] = new TextureRegion(walkSheet, i * width, 0, width, height);
+                walkFrames[i].flip(false, true);
             }
+        }
 
-            // Load Attack Sheet (476x68)
-            var attackRes = getClass().getResourceAsStream("/sprites/archer_attack.png");
-            if (attackRes != null) {
-                BufferedImage attackSheet = ImageIO.read(attackRes);
-                attackFrames = new BufferedImage[7];
-                for (int i = 0; i < 7; i++) {
-                    attackFrames[i] = attackSheet.getSubimage(i * width, 0, width, height);
-                }
+        if (Gdx.files.internal("sprites/archer_attack.png").exists()) {
+            attackSheet = new Texture(Gdx.files.internal("sprites/archer_attack.png"));
+            attackFrames = new TextureRegion[7];
+            for (int i = 0; i < 7; i++) {
+                attackFrames[i] = new TextureRegion(attackSheet, i * width, 0, width, height);
+                attackFrames[i].flip(false, true);
             }
-            
-            System.out.println("[PB-010] Archer 68x68 sprites loaded.");
-        } catch (IOException e) {
-            System.err.println("[Archer] Failed to load sprites: " + e.getMessage());
         }
     }
 
-    /**
-     * PB-010: Ranged Attack.
-     * Fires the projectile and triggers the 7-frame "draw bow" animation.
-     */
     @Override
     public void attack() {
-        long now = System.currentTimeMillis();
+        long now = TimeUtils.millis();
         
-        // Prevent overlapping attacks or spamming faster than the cooldown
         if (!isAttacking && (now - lastShotTime >= SHOT_COOLDOWN)) {
             isAttacking = true;
-            attackFrameIndex = 0; // Start at frame 0 (Not moving)
+            attackFrameIndex = 0; 
             attackAnimTick = 0;
+            attackTimer = 0f; // Reset Web-Safe timer
             lastShotTime = now;
-
-            // Spawn the arrow immediately on trigger
             fireArrow();
+        }
+    }
+    
+    @Override
+    public void update(float dt, List<Rectangle> solidTiles) {
+        physics.update(dt, bounds, solidTiles, 1280, 736);
 
-            // This thread manages the "isAttacking" state duration
-            new Thread(() -> {
-                try {
-                    Thread.sleep(attackDurationMs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                // Once finished, player returns to "Walk/Idle" state
+        // Override base Player update to use custom attack duration
+        if (isAttacking) {
+            attackTimer += dt;
+            if (attackTimer >= customAttackDurationSec) {
                 isAttacking = false;
-            }).start();
+            }
+            updateAttackAnimation();
+        } else {
+            updateWalkAnimation();
         }
     }
 
     private void fireArrow() {
         if (projectileList == null) return;
-
         float arrowSpeed = 800f;
-        // Adjust spawn point so it appears to come from the bow
         int spawnX = (facing == 1) ? bounds.x + width : bounds.x - 10;
         int spawnY = bounds.y + (height / 3);
         
         projectileList.add(new Projectile(spawnX, spawnY, arrowSpeed * facing, 0));
-        System.out.println("[PB-010] Archer loose!");
     }
 }

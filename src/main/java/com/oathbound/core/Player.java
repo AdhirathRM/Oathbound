@@ -1,35 +1,28 @@
 package com.oathbound.core;
 
-import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.Rectangle;
-import java.awt.image.BufferedImage;
-import javax.imageio.ImageIO;
-import java.io.IOException;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import java.awt.Rectangle; // Kept for PhysicsComponent interoperability
 import java.util.List;
 
-/**
- * PB-008, PB-014, PB-017, PB-018 — Base Player Class
- * Master class for Knight, Archer, Mage, Beastman, and Samurai.
- */
 public class Player {
 
-    // ── Dimensions ───────────────────────────────────────────────────────────
     protected final int width = 68;
     protected final int height = 68;
 
-    // ── Physics & Bounds ─────────────────────────────────────────────────────
     protected final Rectangle bounds;
     protected final PhysicsComponent physics;
 
-    // ── Health & I-Frames (PB-014 & PB-018) ──────────────────────────────────
     protected int health = 5;
     protected final int maxHealth = 5;
-    protected boolean invincible = false; // Samurai Dash I-Frames
+    protected boolean invincible = false;
 
-    // ── Animation Arrays ─────────────────────────────────────────────────────
-    protected BufferedImage[] walkFrames;
-    protected BufferedImage[] attackFrames;
+    protected Texture walkSheet;
+    protected Texture attackSheet;
+    protected TextureRegion[] walkFrames;
+    protected TextureRegion[] attackFrames;
     
     protected int frameIndex = 0;
     protected int animTick = 0;
@@ -39,52 +32,49 @@ public class Player {
     protected int attackAnimTick = 0;
     protected int attackAnimSpeed = 3; 
 
-    // ── States ───────────────────────────────────────────────────────────────
     protected boolean isAttacking = false;
-    protected int facing = 1; // 1 = Right, -1 = Left
+    protected int facing = 1; 
     protected final Rectangle attackHitbox;
-    protected int attackDurationMs = 250; 
-
-    // ── Constructor ──────────────────────────────────────────────────────────
+    
+    // WASM-safe Timer (No Threads!)
+    protected float attackTimer = 0f;
+    protected final float ATTACK_DURATION_SEC = 0.25f;
 
     public Player(int startX, int startY) {
         this.bounds = new Rectangle(startX, startY, width, height);
         this.physics = new PhysicsComponent();
         this.attackHitbox = new Rectangle();
-        
         loadSprites();
     }
 
     protected void loadSprites() {
-        try {
-            var walkRes = getClass().getResourceAsStream("/sprites/knight_walk.png");
-            if (walkRes != null) {
-                BufferedImage walkSheet = ImageIO.read(walkRes);
-                walkFrames = new BufferedImage[6];
-                for (int i = 0; i < 6; i++) {
-                    walkFrames[i] = walkSheet.getSubimage(i * width, 0, width, height);
-                }
+        if (Gdx.files.internal("sprites/knight_walk.png").exists()) {
+            walkSheet = new Texture(Gdx.files.internal("sprites/knight_walk.png"));
+            walkFrames = new TextureRegion[6];
+            for (int i = 0; i < 6; i++) {
+                walkFrames[i] = new TextureRegion(walkSheet, i * width, 0, width, height);
+                walkFrames[i].flip(false, true); // Flip Y to match camera
             }
+        }
 
-            var attackRes = getClass().getResourceAsStream("/sprites/knight_attack.png");
-            if (attackRes != null) {
-                BufferedImage attackSheet = ImageIO.read(attackRes);
-                attackFrames = new BufferedImage[7];
-                for (int i = 0; i < 7; i++) {
-                    attackFrames[i] = attackSheet.getSubimage(i * width, 0, width, height);
-                }
+        if (Gdx.files.internal("sprites/knight_attack.png").exists()) {
+            attackSheet = new Texture(Gdx.files.internal("sprites/knight_attack.png"));
+            attackFrames = new TextureRegion[7];
+            for (int i = 0; i < 7; i++) {
+                attackFrames[i] = new TextureRegion(attackSheet, i * width, 0, width, height);
+                attackFrames[i].flip(false, true); // Flip Y to match camera
             }
-        } catch (IOException e) {
-            System.err.println("[Player] Error loading sprites: " + e.getMessage());
         }
     }
 
-    // ── Core Loop ────────────────────────────────────────────────────────────
-
     public void update(float dt, List<Rectangle> solidTiles) {
-        physics.update(dt, bounds, solidTiles, GameWindow.WIDTH, GameWindow.HEIGHT);
+        physics.update(dt, bounds, solidTiles, 1280, 736);
 
         if (isAttacking) {
+            attackTimer += dt;
+            if (attackTimer >= ATTACK_DURATION_SEC) {
+                isAttacking = false;
+            }
             updateAttackAnimation();
         } else {
             updateWalkAnimation();
@@ -117,14 +107,8 @@ public class Player {
         updateHitbox();
     }
 
-    public void render(Graphics2D g) {
-        // Visual indicator for I-Frames (Blue tint)
-        if (invincible) {
-            g.setColor(new Color(100, 200, 255, 80));
-            g.fillOval(bounds.x - 5, bounds.y - 5, width + 10, height + 10);
-        }
-
-        BufferedImage currentFrame = null;
+    public void render(SpriteBatch batch) {
+        TextureRegion currentFrame = null;
         if (isAttacking && attackFrames != null) {
             currentFrame = attackFrames[attackFrameIndex];
         } else if (walkFrames != null) {
@@ -132,33 +116,21 @@ public class Player {
         }
 
         if (currentFrame != null) {
-            if (facing == 1) {
-                g.drawImage(currentFrame, bounds.x, bounds.y, width, height, null);
-            } else {
-                g.drawImage(currentFrame, bounds.x + width, bounds.y, -width, height, null);
+            boolean needsFlip = (facing == -1);
+            if (currentFrame.isFlipX() != needsFlip) {
+                currentFrame.flip(true, false);
             }
-        }
-        
-        // Debug Hitbox: Show for Knight, Beastman, and Samurai
-        boolean isMelee = (this instanceof Samurai || this instanceof Beastman || 
-                          !(this instanceof Archer || this instanceof Mage));
-        
-        if (isAttacking && isMelee) {
-            g.setColor(new Color(255, 0, 0, 100));
-            g.fillRect(attackHitbox.x, attackHitbox.y, attackHitbox.width, attackHitbox.height);
+            batch.draw(currentFrame, bounds.x, bounds.y, width, height);
         }
     }
 
-    // ── Actions & Systems ────────────────────────────────────────────────────
-
     public void takeDamage(int amount) {
-        // PB-018: Samurai I-Frame check
         if (invincible) return;
-
         health -= amount;
         if (health < 0) health = 0;
         if (health == 0) respawn();
     }
+
     public void setHealth(int h) { this.health = h; }
 
     public void respawn() {
@@ -178,18 +150,10 @@ public class Player {
     public void attack() {
         if (!isAttacking) {
             isAttacking = true;
+            attackTimer = 0f;
             attackFrameIndex = 0; 
             attackAnimTick = 0;
             updateHitbox();
-
-            new Thread(() -> {
-                try {
-                    Thread.sleep(attackDurationMs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                isAttacking = false;
-            }).start();
         }
     }
 
@@ -211,11 +175,13 @@ public class Player {
         physics.velocityX = pressed ? 300f : (physics.velocityX > 0 ? 0 : physics.velocityX);
     }
 
-    public void jump() {
-        physics.jump();
+    public void jump() { physics.jump(); }
+
+    public void dispose() {
+        if (walkSheet != null) walkSheet.dispose();
+        if (attackSheet != null) attackSheet.dispose();
     }
 
-    // ── Getters ──────────────────────────────────────────────────────────────
     public Rectangle getBounds() { return bounds; }
     public int getFacing() { return this.facing; }
     public Rectangle getAttackHitbox() { return attackHitbox; }

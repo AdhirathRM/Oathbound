@@ -52,7 +52,6 @@ public class Player {
     protected final float ATTACK_DURATION_SEC = 0.25f;
 
     public Player(int startX, int startY) {
-        // Initialize with the tighter hitbox size!
         this.bounds = new Rectangle(startX, startY, hitboxWidth, hitboxHeight);
         this.physics = new PhysicsComponent();
         this.attackHitbox = new Rectangle();
@@ -145,7 +144,6 @@ public class Player {
             if (currentFrame.isFlipX() != needsFlip) {
                 currentFrame.flip(true, false);
             }
-            // Apply the offset so the sprite draws correctly over the slim hitbox!
             batch.draw(currentFrame, bounds.x - renderOffsetX, bounds.y - renderOffsetY, width, height);
         }
         
@@ -176,15 +174,10 @@ public class Player {
         if (invincible) return;
         health -= amount;
         if (health < 0) health = 0;
-        if (health == 0) respawn();
+        // Logic handled by game state now
     }
 
     public void setHealth(int h) { this.health = h; }
-
-    public void respawn() {
-        health = maxHealth;
-        resetPosition(100, 200);
-    }
 
     public void resetPosition(int x, int y) {
         this.bounds.x = x;
@@ -208,7 +201,6 @@ public class Player {
     protected void updateHitbox() {
         int hbW = 60; 
         int hbH = 45;
-        // Use bounds.width instead of sprite width so the attack anchors to the physical body
         int hbX = (facing == 1) ? bounds.x + bounds.width : bounds.x - hbW;
         int hbY = bounds.y + (bounds.height / 4);
         attackHitbox.setBounds(hbX, hbY, hbW, hbH);

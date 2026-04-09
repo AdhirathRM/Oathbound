@@ -4,7 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import java.awt.Rectangle; // Kept for PhysicsComponent interoperability
+import java.awt.Rectangle; 
 import java.io.BufferedReader;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,18 +27,21 @@ public class TileMapLoader {
     public static final int TILE_PLATFORM_R  = 8; 
     public static final int TILE_PLATFORM_M  = 10;
     public static final int TILE_DAMAGED     = 11;
-    public static final int TILE_STAIR       = 12;
+    
+    // NEW: Explicit Left and Right facing stairs!
+    public static final int TILE_STAIR_L     = 12; 
+    public static final int TILE_STAIR_R     = 13; 
 
     private int[][] tileGrid;
     private int rows;
     private int cols;
 
     private final List<Rectangle> solidTiles = new ArrayList<>();
+    private final List<Rectangle> trapTiles = new ArrayList<>(); 
     private final List<int[]> vowStonePositions = new ArrayList<>();
     private final List<int[]> enemyPositions = new ArrayList<>();
     private int[] playerSpawn = new int[]{100, 200};
 
-    // LibGDX Colors use 0-1 float range instead of 0-255
     private final Color darkStone   = new Color(60/255f, 55/255f, 80/255f, 1f);
     private final Color midStone    = new Color(90/255f, 85/255f, 110/255f, 1f);
     private final Color highStone   = new Color(140/255f, 130/255f, 160/255f, 1f);
@@ -55,6 +58,7 @@ public class TileMapLoader {
 
     public void load(String resourcePath) {
         solidTiles.clear();
+        trapTiles.clear(); 
         vowStonePositions.clear();
         enemyPositions.clear();
 
@@ -80,13 +84,21 @@ public class TileMapLoader {
 
                     if (tileId == TILE_GROUND || tileId == TILE_PLATFORM || tileId == TILE_ROCK
                      || tileId == TILE_WALL   || tileId == TILE_COLUMN   || tileId == TILE_DAMAGED
-                     || tileId == TILE_STAIR  || tileId == TILE_PLATFORM_L || tileId == TILE_PLATFORM_M
+                     || tileId == TILE_STAIR_L || tileId == TILE_STAIR_R || tileId == TILE_PLATFORM_L || tileId == TILE_PLATFORM_M
                      || tileId == TILE_PLATFORM_R) {
                         solidTiles.add(new Rectangle(
                                 col * TILE_SIZE,
                                 row * TILE_SIZE,
                                 TILE_SIZE,
                                 TILE_SIZE
+                        ));
+                    } 
+                    else if (tileId == TILE_TRAP) {
+                        trapTiles.add(new Rectangle(
+                                col * TILE_SIZE,
+                                row * TILE_SIZE + (TILE_SIZE / 2),
+                                TILE_SIZE,
+                                TILE_SIZE / 2
                         ));
                     }
                 }
@@ -140,15 +152,17 @@ public class TileMapLoader {
                     case TILE_DAMAGED:
                         drawDamaged(sr, x, y);
                         break;
-                    case TILE_STAIR:
-                        drawStair(sr, x, y, col);
+                    case TILE_STAIR_L:
+                        drawStair(sr, x, y, false); // false = face left (walk up to the right)
+                        break;
+                    case TILE_STAIR_R:
+                        drawStair(sr, x, y, true);  // true = face right (walk up to the left)
                         break;
                 }
             }
         }
     }
 
-    // Helper to draw outlines without leaving ShapeType.Filled (Better WebGL Performance)
     private void drawOutline(ShapeRenderer sr, int x, int y, int w, int h) {
         sr.rect(x, y, w, 1);
         sr.rect(x, y + h - 1, w, 1);
@@ -275,8 +289,8 @@ public class TileMapLoader {
         drawOutline(sr, x + 4, y, TILE_SIZE - 8, TILE_SIZE - 1);
     }
 
-    private void drawStair(ShapeRenderer sr, int x, int y, int col) {
-        boolean faceRight = (col % 2 == 0);
+    // NEW: Boolean input instead of alternating column parity
+    private void drawStair(ShapeRenderer sr, int x, int y, boolean faceRight) {
         for (int i = 0; i < 4; i++) {
             int stepHeight = 8;
             int stepWidth = (i + 1) * 8;
@@ -354,7 +368,8 @@ public class TileMapLoader {
             case 'M': return TILE_PLATFORM_M;
             case 'X': return TILE_PLATFORM_R;
             case 'D': return TILE_DAMAGED;
-            case 'S': return TILE_STAIR;
+            case 'S': return TILE_STAIR_L; // Upper-case S = Faces Left
+            case 's': return TILE_STAIR_R; // Lower-case s = Faces Right
             case 'R': return TILE_ROCK;
             case 'T': return TILE_TRAP;
             case 'V': case 'v':
@@ -371,6 +386,7 @@ public class TileMapLoader {
     }
 
     public List<Rectangle> getSolidTiles() { return Collections.unmodifiableList(solidTiles); }
+    public List<Rectangle> getTrapTiles() { return Collections.unmodifiableList(trapTiles); }
     public List<int[]> getVowStonePositions() { return Collections.unmodifiableList(vowStonePositions); }
     public List<int[]> getEnemyPositions() { return enemyPositions; }
     public int[] getPlayerSpawn() { return playerSpawn; }

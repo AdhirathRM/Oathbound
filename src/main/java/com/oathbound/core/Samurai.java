@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * PB-018 — The Samurai Class
- * Features a Dash-Slash with I-Frames. Thread.sleep completely removed!
+ * Updated for exact hitbox offsets & movement locking!
  */
 public class Samurai extends Player {
 
@@ -24,7 +24,6 @@ public class Samurai extends Player {
 
     public Samurai(int x, int y) {
         super(x, y);
-        this.attackAnimSpeed = 2;
         loadSprites();
     }
 
@@ -54,11 +53,11 @@ public class Samurai extends Player {
         if (!isAttacking && (now - lastDashTime >= dashCooldown)) {
             isAttacking = true;
             invincible = true; 
-            attackTimer = 0f; // Reset Web-Safe timer
+            attackTimer = 0f; 
+            attackAnimTimer = 0f; 
             lastDashTime = now;
             attackFrameIndex = 0;
 
-            // Apply the dash force instantly
             physics.velocityX = dashSpeed * facing;
         }
     }
@@ -70,39 +69,39 @@ public class Samurai extends Player {
         if (isAttacking) {
             attackTimer += dt;
             
-            // 1. Check if the high-speed dash phase is over
             if (attackTimer >= dashDurationSec && invincible) {
                 invincible = false;
-                physics.velocityX = 0f; // Stop the surge
+                physics.velocityX = 0f; 
             }
             
-            // 2. Check if the whole attack animation is over
             if (attackTimer >= customAttackDurationSec) {
                 isAttacking = false;
-                invincible = false; // Safety catch
+                invincible = false; 
+                attackHitbox.setBounds(0, 0, 0, 0); 
+            } else {
+                updateAttackAnimation(dt);
             }
-            updateAttackAnimation();
         } else {
-            updateWalkAnimation();
+            updateWalkAnimation(dt); 
         }
     }
 
     @Override
     public void render(SpriteBatch batch) {
-        // PB-018 Visual: LibGDX native way to tint sprites!
-        // This is much cooler than drawing a blue box. It tints the actual samurai blue.
         if (invincible) {
-            batch.setColor(0.4f, 0.8f, 1f, 0.6f); // Semi-transparent blue
-            
-            // Draw a ghost "after-image" lagging slightly behind
             TextureRegion currentFrame = isAttacking ? attackFrames[attackFrameIndex] : walkFrames[frameIndex];
             if (currentFrame != null) {
                 boolean needsFlip = (facing == -1);
                 if (currentFrame.isFlipX() != needsFlip) currentFrame.flip(true, false);
-                batch.draw(currentFrame, bounds.x - (facing * 20), bounds.y, width, height);
+                
+                for (int i = 1; i <= 3; i++) {
+                    float alpha = 0.6f - (i * 0.15f); 
+                    batch.setColor(0.2f, 0.9f, 1f, alpha); 
+                    
+                    // Render ghosts with the correct render offset!
+                    batch.draw(currentFrame, (bounds.x - renderOffsetX) - (facing * (35 * i)), bounds.y - renderOffsetY, width, height);
+                }
             }
-            
-            // Reset color so the main body draws normally
             batch.setColor(Color.WHITE); 
         }
         
@@ -111,10 +110,23 @@ public class Samurai extends Player {
 
     @Override
     protected void updateHitbox() {
-        int hbW = 85; 
+        int hbW = 120; 
         int hbH = 30;
-        int hbX = (facing == 1) ? bounds.x + width - 10 : bounds.x - hbW + 10;
-        int hbY = bounds.y + (height / 2);
+        // Use bounds.width to align the massive slash to the physical body
+        int hbX = (facing == 1) ? bounds.x + bounds.width - 10 : bounds.x - hbW + 10;
+        int hbY = bounds.y + (bounds.height / 2);
         attackHitbox.setBounds(hbX, hbY, hbW, hbH);
+    }
+    
+    @Override
+    public void setLeft(boolean pressed) {
+        if (invincible) return; 
+        super.setLeft(pressed);
+    }
+
+    @Override
+    public void setRight(boolean pressed) {
+        if (invincible) return; 
+        super.setRight(pressed);
     }
 }

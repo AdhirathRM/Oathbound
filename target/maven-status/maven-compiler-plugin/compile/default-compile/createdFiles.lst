@@ -1,7 +1,13 @@
 com\oathbound\desktop\DesktopLauncher.class
 com\oathbound\core\HUD.class
-com\oathbound\core\TileMapLoader.class
+com\oathbound\core\Archer.class
+com\oathbound\core\Projectile.class
 com\oathbound\core\PhysicsComponent.class
 com\oathbound\core\OathboundGame.class
+com\oathbound\core\Mage.class
+com\oathbound\core\Samurai.class
+com\oathbound\core\TileMapLoader.class
+com\oathbound\core\Enemy.class
+com\oathbound\core\Beastman.class
 com\oathbound\core\VowStone.class
 com\oathbound\core\Player.class

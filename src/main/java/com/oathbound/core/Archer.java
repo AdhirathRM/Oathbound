@@ -53,8 +53,8 @@ public class Archer extends Player {
         if (!isAttacking && (now - lastShotTime >= SHOT_COOLDOWN)) {
             isAttacking = true;
             attackFrameIndex = 0; 
-            attackAnimTick = 0;
-            attackTimer = 0f; // Reset Web-Safe timer
+            attackAnimTimer = 0f; // Fixed: Use the new float timer
+            attackTimer = 0f; 
             lastShotTime = now;
             fireArrow();
         }
@@ -69,10 +69,12 @@ public class Archer extends Player {
             attackTimer += dt;
             if (attackTimer >= customAttackDurationSec) {
                 isAttacking = false;
+                attackHitbox.setBounds(0, 0, 0, 0); // Clean up ghost hitbox
+            } else {
+                updateAttackAnimation(dt); // Fixed: Pass dt
             }
-            updateAttackAnimation();
         } else {
-            updateWalkAnimation();
+            updateWalkAnimation(dt); // Fixed: Pass dt
         }
     }
 

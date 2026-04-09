@@ -13,14 +13,10 @@ public class Enemy {
     private final Rectangle bounds;
     private final PhysicsComponent physics;
     
-    // The actual size of each frame on the 408x68 sprite sheet
     private final int FRAME_SIZE = 68;
-    
-    // The visual rendering size (Scaled up 1.5x to make them look bigger and more menacing!)
     private final int renderWidth = 102;
     private final int renderHeight = 102;
     
-    // Scaled-up tighter collision bounds to match the new visual size
     private final int hitboxWidth = 51; 
     private final int hitboxHeight = 81; 
     private final int renderOffsetX = (renderWidth - hitboxWidth) / 2;
@@ -52,8 +48,18 @@ public class Enemy {
 
     private final Rectangle attackHitbox;
 
-    public Enemy(int startX, int startY) {
-        this.bounds = new Rectangle(startX, startY, hitboxWidth, hitboxHeight);
+    public Enemy(int gridX, int gridY) {
+        // ALIGNMENT FIX: 
+        // 1. Center the 51px hitbox horizontally over the 32px grid cell.
+        int alignedX = gridX + (32 - hitboxWidth) / 2;
+        // 2. Ensure their feet (bottom of hitbox) are touching the floor of the cell.
+        int alignedY = (gridY + 32) - hitboxHeight;
+        
+        // 3. Prevent spawning partially outside the screen boundaries to stop "instant falling"
+        if (alignedX < 5) alignedX = 5;
+        if (alignedX + hitboxWidth > 1275) alignedX = 1275 - hitboxWidth;
+
+        this.bounds = new Rectangle(alignedX, alignedY, hitboxWidth, hitboxHeight);
         this.physics = new PhysicsComponent();
         this.attackHitbox = new Rectangle(0, 0, 0, 0); 
         loadSprites();
@@ -64,7 +70,6 @@ public class Enemy {
             walkSheet = new Texture(Gdx.files.internal("sprites/enemy_walk.png"));
             walkFrames = new TextureRegion[6];
             for (int i = 0; i < 6; i++) {
-                // Slice based on the true pixel size of the image
                 walkFrames[i] = new TextureRegion(walkSheet, i * FRAME_SIZE, 0, FRAME_SIZE, FRAME_SIZE);
                 walkFrames[i].flip(false, true); 
             }
@@ -128,7 +133,6 @@ public class Enemy {
                     frameIndex = 0;
                     attackHitbox.setBounds(0, 0, 0, 0); 
                 } else if (frameIndex == 3 || frameIndex == 4) {
-                    // Scaled up attack hitbox to match bigger enemy
                     int hbW = 75;
                     int hbH = 75;
                     int hbX = (direction == 1) ? bounds.x + bounds.width : bounds.x - hbW;
@@ -141,12 +145,34 @@ public class Enemy {
             return;
         }
 
+        // --- IMPROVED MOVEMENT & AI ---
         physics.velocityX = moveSpeed * direction;
         physics.update(dt, bounds, solidTiles, 1280, 736); 
 
-        if (physics.velocityX == 0) {
-            direction *= -1; 
+        // 1. Check for Walls (Proactive Wall Detection + Screen Edge Detection)
+        int wallProbeX = (direction == 1) ? bounds.x + bounds.width + 2 : bounds.x - 4;
+        
+        // Check if the probe is going past the screen edges
+        boolean hittingScreenEdge = (direction == 1 && bounds.x + bounds.width >= 1278) 
+                                 || (direction == -1 && bounds.x <= 2);
+        
+        Rectangle wallProbe = new Rectangle(wallProbeX, bounds.y + 10, 2, bounds.height - 20);
+        boolean hittingWall = hittingScreenEdge; 
+        
+        if (!hittingWall) {
+            for (Rectangle tile : solidTiles) {
+                if (wallProbe.intersects(tile)) {
+                    hittingWall = true;
+                    break;
+                }
+            }
+        }
+
+        if (hittingWall) {
+            direction *= -1;
+            physics.velocityX = moveSpeed * direction;
         } 
+        // 2. Check for Ledges (Proactive Ledge Detection)
         else if (physics.isOnGround()) {
             boolean nearLedge = true;
             int probeX = (direction == 1) ? bounds.x + bounds.width + 5 : bounds.x - 5;
@@ -223,9 +249,7 @@ public class Enemy {
                 currentFrame.flip(true, false);
             }
             
-            // Draw with the scaled up renderWidth and renderHeight!
             batch.draw(currentFrame, bounds.x - renderOffsetX, bounds.y - renderOffsetY, renderWidth, renderHeight);
-            
             batch.setColor(Color.WHITE); 
         }
     }

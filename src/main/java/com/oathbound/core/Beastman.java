@@ -1,22 +1,25 @@
 package com.oathbound.core;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import java.awt.Rectangle;
 import java.util.List;
 
 /**
  * PB-017 — The Beastman Class
- * Ported to LibGDX. High-speed rapid melee attacker.
+ * Updated for exact hitbox offsets & cyan energy claws!
  */
 public class Beastman extends Player {
 
     private final float customAttackDurationSec = 0.40f; 
+    private Texture clawTexture; 
 
     public Beastman(int x, int y) {
         super(x, y);
-        this.attackAnimSpeed = 2; // Fast animation speed
         loadSprites();
     }
 
@@ -39,6 +42,23 @@ public class Beastman extends Player {
                 attackFrames[i].flip(false, true);
             }
         }
+
+        // GENERATE SHARP ENERGY CLAW TEXTURE
+        Pixmap pixmap = new Pixmap(64, 64, Pixmap.Format.RGBA8888);
+        pixmap.setColor(Color.WHITE);
+
+        for (int i = 0; i < 3; i++) {
+            int offsetX = 16 + (i * 16);
+            int startY = (i == 1) ? 2 : 12;  
+            int endY = (i == 1) ? 62 : 52;   
+            int thickY = startY + 15;        
+
+            pixmap.fillTriangle(offsetX, startY, offsetX - 4, thickY, offsetX + 4, thickY);
+            pixmap.fillTriangle(offsetX - 4, thickY, offsetX + 4, thickY, offsetX, endY);
+        }
+
+        clawTexture = new Texture(pixmap);
+        pixmap.dispose();
     }
     
     @Override
@@ -49,10 +69,49 @@ public class Beastman extends Player {
             attackTimer += dt;
             if (attackTimer >= customAttackDurationSec) {
                 isAttacking = false;
+                attackHitbox.setBounds(0, 0, 0, 0); 
+            } else {
+                updateAttackAnimation(dt); 
             }
-            updateAttackAnimation();
         } else {
-            updateWalkAnimation();
+            updateWalkAnimation(dt); 
+        }
+    }
+
+    @Override
+    public void render(SpriteBatch batch) {
+        super.render(batch); 
+
+        if (isAttacking && attackHitbox.width > 0 && clawTexture != null) {
+            float progress = attackTimer / customAttackDurationSec;
+
+            float easeProgress = (float)(1.0 - Math.pow(1.0 - progress, 3));
+            float alpha = 1f - progress; 
+
+            // Cyan color
+            batch.setColor(0.1f, 0.8f, 1.0f, alpha); 
+
+            int clawW = 48;
+            int clawH = 64;
+
+            float currentX = attackHitbox.x + (attackHitbox.width - clawW) / 2f;
+            float currentY = attackHitbox.y + (attackHitbox.height - clawH) / 2f;
+
+            float yOffset = 20 * (1f - easeProgress);
+
+            TextureRegion clawRegion = new TextureRegion(clawTexture);
+            if (facing == -1) clawRegion.flip(true, false);
+
+            float rotation = (facing == 1) ? -25f : 25f;
+
+            batch.draw(clawRegion,
+                       currentX, currentY + yOffset - 10,
+                       clawW / 2f, clawH / 2f, 
+                       clawW, clawH,
+                       1.0f, 1.0f, 
+                       rotation);
+
+            batch.setColor(Color.WHITE); 
         }
     }
 
@@ -60,7 +119,8 @@ public class Beastman extends Player {
     protected void updateHitbox() {
         int hbW = 42; 
         int hbH = 62; 
-        int hbX = (facing == 1) ? bounds.x + width - 12 : bounds.x - hbW + 12;
+        // Use bounds.width to align the attack to the physical body
+        int hbX = (facing == 1) ? bounds.x + bounds.width - 12 : bounds.x - hbW + 12;
         int hbY = bounds.y + 2;
         attackHitbox.setBounds(hbX, hbY, hbW, hbH);
     }
@@ -75,5 +135,11 @@ public class Beastman extends Player {
     public void setRight(boolean pressed) {
         if (pressed) facing = 1;
         physics.velocityX = pressed ? 420f : (physics.velocityX > 0 ? 0 : physics.velocityX);
+    }
+
+    @Override
+    public void dispose() {
+        super.dispose();
+        if (clawTexture != null) clawTexture.dispose(); 
     }
 }

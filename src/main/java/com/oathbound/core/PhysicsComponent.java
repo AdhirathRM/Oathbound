@@ -6,6 +6,7 @@ import java.util.List;
 /**
  * PB-002, PB-003, PB-007 — Advanced Physics Component
  * Now includes Coyote Time and Jump Buffering for "Pro" game feel.
+ * Updated for variable frame-rate support (Sub-pixel movement).
  */
 public class PhysicsComponent {
 
@@ -22,6 +23,10 @@ public class PhysicsComponent {
     public float velocityX = 0f;
     public float velocityY = 0f;
     private boolean onGround = false;
+
+    // High FPS Sub-pixel movement remainders
+    private float remainderX = 0f;
+    private float remainderY = 0f;
 
     // PB-007 Timers
     private long lastTimeOnGround = 0;
@@ -44,12 +49,18 @@ public class PhysicsComponent {
             }
         }
 
-        // 3. Move Vertically & Resolve Collisions
-        bounds.y += (int) (velocityY * dt);
+        // 3. Move Vertically & Resolve Collisions (with sub-pixel fix)
+        remainderY += (velocityY * dt);
+        int moveY = (int) remainderY;
+        remainderY -= moveY;
+        bounds.y += moveY;
         resolveVerticalCollisions(bounds, solidTiles);
 
-        // 4. Move Horizontally & Resolve Collisions
-        bounds.x += (int) (velocityX * dt);
+        // 4. Move Horizontally & Resolve Collisions (with sub-pixel fix)
+        remainderX += (velocityX * dt);
+        int moveX = (int) remainderX;
+        remainderX -= moveX;
+        bounds.x += moveX;
         resolveHorizontalCollisions(bounds, solidTiles);
 
         // 5. Screen Clamping
@@ -70,6 +81,7 @@ public class PhysicsComponent {
 
         if (jumpBuffered && canCoyoteJump) {
             velocityY = JUMP_VELOCITY;
+            remainderY = 0f; // Clear remainder to prevent jumping weirdness
             onGround = false;
             
             // CRITICAL: Clear timers so we don't double-jump
@@ -84,7 +96,7 @@ public class PhysicsComponent {
         return true; 
     }
 
-    // ── Internal Helpers (Cleaned up from your original code) ────────────────
+    // ── Internal Helpers ───────────────────────────────────────────────────────
 
     private void resolveVerticalCollisions(Rectangle bounds, List<Rectangle> solidTiles) {
         Rectangle bestTile = null;
@@ -103,6 +115,7 @@ public class PhysicsComponent {
                 bounds.y = bestTile.y + bestTile.height;
             }
             velocityY = 0f;
+            remainderY = 0f; // Clear remainder on collision
         }
     }
 
@@ -111,7 +124,9 @@ public class PhysicsComponent {
             if (!bounds.intersects(tile)) continue;
             if (velocityX > 0) bounds.x = tile.x - bounds.width;
             else if (velocityX < 0) bounds.x = tile.x + tile.width;
+            
             velocityX = 0f;
+            remainderX = 0f; // Clear remainder on collision
             break;
         }
     }
@@ -119,7 +134,7 @@ public class PhysicsComponent {
     private void clampToScreen(Rectangle bounds, int screenW, int screenH) {
         if (bounds.x < 0) bounds.x = 0;
         if (bounds.x + bounds.width > screenW) bounds.x = screenW - bounds.width;
-        if (bounds.y < 0) { bounds.y = 0; velocityY = 0; }
+        if (bounds.y < 0) { bounds.y = 0; velocityY = 0; remainderY = 0f; }
         // Note: We don't clamp the bottom so PB-021 (Pit Detection) works!
     }
 

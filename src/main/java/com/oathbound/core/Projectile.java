@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * PB-011 & PB-016 — Projectile Class
- * Ported to LibGDX.
+ * Features Mana Bomb Explosion States and sub-pixel movement!
  */
 public class Projectile {
 
@@ -20,6 +20,16 @@ public class Projectile {
 
     private boolean isAOE = false;
     private final int explosionRadius = 130;
+    
+    // Explosion State Variables
+    private boolean exploding = false;
+    private float explosionTimer = 0f;
+    private final float EXPLOSION_DURATION = 0.25f; // Blast lasts 1/4th of a second
+    private boolean damageApplied = false;
+
+    // High FPS Sub-pixel movement remainders
+    private float remainderX = 0f;
+    private float remainderY = 0f;
 
     public Projectile(int x, int y, float velX, float velY) {
         this(x, y, velX, velY, false);
@@ -38,16 +48,39 @@ public class Projectile {
     public void update(float dt, List<Rectangle> solidTiles) {
         if (!active) return;
 
-        bounds.x += (int) (velocityX * dt);
-        bounds.y += (int) (velocityY * dt);
+        // If it's exploding, stop moving and process the blast timer
+        if (exploding) {
+            explosionTimer += dt;
+            if (explosionTimer >= EXPLOSION_DURATION) {
+                deactivate();
+            }
+            return; 
+        }
 
+        // Apply sub-pixel movement
+        remainderX += (velocityX * dt);
+        int moveX = (int) remainderX;
+        remainderX -= moveX;
+        bounds.x += moveX;
+
+        remainderY += (velocityY * dt);
+        int moveY = (int) remainderY;
+        remainderY -= moveY;
+        bounds.y += moveY;
+
+        // Check for wall collisions
         for (Rectangle tile : solidTiles) {
             if (bounds.intersects(tile)) {
-                deactivate();
+                if (isAOE) {
+                    triggerExplosion(); // Mana bombs explode on walls!
+                } else {
+                    deactivate(); // Arrows just break
+                }
                 break;
             }
         }
 
+        // Despawn if it flies completely off screen
         if (bounds.x < -100 || bounds.x > 1380 || 
             bounds.y < -100 || bounds.y > 836) {
             active = false;
@@ -57,16 +90,32 @@ public class Projectile {
     public void render(ShapeRenderer sr) {
         if (!active) return;
         
-        if (isAOE) {
-            float cx = bounds.x + bounds.width / 2f;
-            float cy = bounds.y + bounds.height / 2f;
+        float cx = bounds.x + bounds.width / 2f;
+        float cy = bounds.y + bounds.height / 2f;
+
+        if (exploding) {
+            // Calculate blast expansion and fade-out
+            float progress = explosionTimer / EXPLOSION_DURATION;
+            float currentRadius = explosionRadius * (0.2f + 0.8f * progress); // Expand rapidly
+            float alpha = 1f - progress; // Fade to invisible
+
+            // Outer blast wave
+            sr.setColor(0f, 191/255f, 1f, alpha);
+            sr.circle(cx, cy, currentRadius);
+
+            // Bright inner core
+            sr.setColor(1f, 1f, 1f, alpha);
+            sr.circle(cx, cy, currentRadius * 0.6f);
+            
+        } else if (isAOE) {
+            // Flying Mana Bomb Visual
             float r = bounds.width / 2f;
 
-            // 1. Outer Glow (Deep Blue Aura)
+            // 1. Outer Glow
             sr.setColor(0f, 80/255f, 1f, 120/255f); 
             sr.circle(cx, cy, r + 6);
 
-            // 2. Main Body (Electric Blue)
+            // 2. Main Body
             sr.setColor(0f, 191/255f, 1f, 1f); 
             sr.circle(cx, cy, r);
 
@@ -89,10 +138,23 @@ public class Projectile {
             }
         }
     }
+    
+    public void triggerExplosion() {
+        if (!exploding) {
+            exploding = true;
+            velocityX = 0f;
+            velocityY = 0f;
+        }
+    }
 
     public void deactivate() { this.active = false; }
     public boolean isActive() { return active; }
     public Rectangle getBounds() { return bounds; }
+    
     public boolean isAOE() { return isAOE; }
     public int getExplosionRadius() { return explosionRadius; }
+    
+    public boolean isExploding() { return exploding; }
+    public boolean isDamageApplied() { return damageApplied; }
+    public void setDamageApplied(boolean applied) { this.damageApplied = applied; }
 }

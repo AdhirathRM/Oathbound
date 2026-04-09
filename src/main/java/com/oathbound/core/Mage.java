@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * PB-016 — The Mage Class
- * Ported to LibGDX. Replaced Thread.sleep with dt-based state management.
+ * Updated for exact hitbox offset calculations.
  */
 public class Mage extends Player {
 
@@ -51,7 +51,7 @@ public class Mage extends Player {
         if (!isAttacking && (now - lastSpellTime >= SPELL_COOLDOWN)) {
             isAttacking = true;
             attackFrameIndex = 0;
-            attackAnimTick = 0;
+            attackAnimTimer = 0f; 
             attackTimer = 0f;
             lastSpellTime = now;
             castFireblast();
@@ -66,17 +66,20 @@ public class Mage extends Player {
             attackTimer += dt;
             if (attackTimer >= customAttackDurationSec) {
                 isAttacking = false;
+                attackHitbox.setBounds(0, 0, 0, 0); 
+            } else {
+                updateAttackAnimation(dt); 
             }
-            updateAttackAnimation();
         } else {
-            updateWalkAnimation();
+            updateWalkAnimation(dt); 
         }
     }
 
     private void castFireblast() {
         float spellSpeed = 400f; 
-        int spawnX = (facing == 1) ? bounds.x + width : bounds.x - 32;
-        int spawnY = bounds.y + (height / 3);
+        // Adjusted spawn point based on the physical body bounds!
+        int spawnX = (facing == 1) ? bounds.x + bounds.width : bounds.x - 32;
+        int spawnY = bounds.y + (bounds.height / 3);
         projectileList.add(new Projectile(spawnX, spawnY, spellSpeed * facing, 0, true));
     }
 }

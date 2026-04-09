@@ -1,31 +1,19 @@
 package com.oathbound.core;
 
-import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.Rectangle;
-import java.awt.RenderingHints;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.files.FileHandle;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import java.awt.Rectangle; // Kept for PhysicsComponent interoperability
 import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-/**
- * PB-004 — Tile-Map Loader (Procedural Pixel-Art Rendering)
- *
- * Parses a dense .txt level file from the res/levels/ directory and produces:
- * - A 2D tile-ID grid (for rendering)
- * - A flat list of solid collision rectangles (for PB-006)
- * - Dynamic spawn points for Vow Stones, Enemies, and Players
- * * *All graphics are procedurally generated using Java 2D to emulate retro pixel art!*
- */
 public class TileMapLoader {
-
-    // ── Constants ────────────────────────────────────────────────────────────
 
     public static final int TILE_SIZE = 32;
 
-    // Tile ID constants
     public static final int TILE_AIR      = 0;
     public static final int TILE_GROUND   = 1;
     public static final int TILE_PLATFORM = 2;
@@ -33,15 +21,13 @@ public class TileMapLoader {
     public static final int TILE_ROCK     = 4;
     public static final int TILE_VOW      = 9;
     
-    public static final int TILE_WALL        = 5;  // token 'W' — vertical wall bricks
-    public static final int TILE_COLUMN      = 6;  // token 'C' — decorative column
-    public static final int TILE_PLATFORM_L  = 7;  // token 'L' — platform left cap
-    public static final int TILE_PLATFORM_R  = 8;  // token 'X' — platform right cap
-    public static final int TILE_PLATFORM_M  = 10; // token 'M' — platform middle
-    public static final int TILE_DAMAGED     = 11; // token 'D' — damaged brick
-    public static final int TILE_STAIR       = 12; // token 'S' — stair tile
-
-    // ── Fields ───────────────────────────────────────────────────────────────
+    public static final int TILE_WALL        = 5; 
+    public static final int TILE_COLUMN      = 6; 
+    public static final int TILE_PLATFORM_L  = 7; 
+    public static final int TILE_PLATFORM_R  = 8; 
+    public static final int TILE_PLATFORM_M  = 10;
+    public static final int TILE_DAMAGED     = 11;
+    public static final int TILE_STAIR       = 12;
 
     private int[][] tileGrid;
     private int rows;
@@ -52,22 +38,20 @@ public class TileMapLoader {
     private final List<int[]> enemyPositions = new ArrayList<>();
     private int[] playerSpawn = new int[]{100, 200};
 
-    // ── Palette ──────────────────────────────────────────────────────────────
-    
-    private final Color darkStone   = new Color(60, 55, 80);
-    private final Color midStone    = new Color(90, 85, 110);
-    private final Color highStone   = new Color(140, 130, 160);
-    private final Color flagstone   = new Color(45, 40, 60);
-    private final Color mortar      = new Color(25, 20, 35);
-    private final Color woodBase    = new Color(80, 55, 25);
-    private final Color woodHigh    = new Color(110, 80, 40);
-    private final Color paleGold    = new Color(200, 180, 80);
-    private final Color ghostBlue   = new Color(80, 120, 200);
-    private final Color ivory       = new Color(180, 165, 120);
-    private final Color trapBase    = new Color(30, 25, 35);
-    private final Color bloodRed    = new Color(160, 20, 20);
-
-    // ── Public API ───────────────────────────────────────────────────────────
+    // LibGDX Colors use 0-1 float range instead of 0-255
+    private final Color darkStone   = new Color(60/255f, 55/255f, 80/255f, 1f);
+    private final Color midStone    = new Color(90/255f, 85/255f, 110/255f, 1f);
+    private final Color highStone   = new Color(140/255f, 130/255f, 160/255f, 1f);
+    private final Color flagstone   = new Color(45/255f, 40/255f, 60/255f, 1f);
+    private final Color mortar      = new Color(25/255f, 20/255f, 35/255f, 1f);
+    private final Color woodBase    = new Color(80/255f, 55/255f, 25/255f, 1f);
+    private final Color woodHigh    = new Color(110/255f, 80/255f, 40/255f, 1f);
+    private final Color paleGold    = new Color(200/255f, 180/255f, 80/255f, 1f);
+    private final Color ghostBlue   = new Color(80/255f, 120/255f, 200/255f, 1f);
+    private final Color ivory       = new Color(180/255f, 165/255f, 120/255f, 1f);
+    private final Color trapBase    = new Color(30/255f, 25/255f, 35/255f, 1f);
+    private final Color bloodRed    = new Color(160/255f, 20/255f, 20/255f, 1f);
+    private final Color black       = Color.BLACK;
 
     public void load(String resourcePath) {
         solidTiles.clear();
@@ -76,9 +60,10 @@ public class TileMapLoader {
 
         List<int[]> rowList = new ArrayList<>();
 
-        try (InputStream is = getClass().getResourceAsStream(resourcePath);
-             BufferedReader br = new BufferedReader(new InputStreamReader(is))) {
+        FileHandle file = Gdx.files.internal(resourcePath);
+        if (!file.exists()) return;
 
+        try (BufferedReader br = file.reader(8192)) {
             String line;
             int row = 0;
 
@@ -94,9 +79,9 @@ public class TileMapLoader {
                     tileRow[col] = tileId;
 
                     if (tileId == TILE_GROUND || tileId == TILE_PLATFORM || tileId == TILE_ROCK
- || tileId == TILE_WALL   || tileId == TILE_COLUMN   || tileId == TILE_DAMAGED
- || tileId == TILE_STAIR  || tileId == TILE_PLATFORM_L || tileId == TILE_PLATFORM_M
- || tileId == TILE_PLATFORM_R) {
+                     || tileId == TILE_WALL   || tileId == TILE_COLUMN   || tileId == TILE_DAMAGED
+                     || tileId == TILE_STAIR  || tileId == TILE_PLATFORM_L || tileId == TILE_PLATFORM_M
+                     || tileId == TILE_PLATFORM_R) {
                         solidTiles.add(new Rectangle(
                                 col * TILE_SIZE,
                                 row * TILE_SIZE,
@@ -109,7 +94,6 @@ public class TileMapLoader {
                 rowList.add(tileRow);
                 row++;
             }
-
         } catch (Exception e) {
             throw new RuntimeException("TileMapLoader: failed to load " + resourcePath, e);
         }
@@ -119,12 +103,9 @@ public class TileMapLoader {
         tileGrid = rowList.toArray(new int[0][]);
     }
 
-    public void render(Graphics2D g) {
+    public void render(ShapeRenderer sr) {
         if (tileGrid == null) return;
         
-        // Strict Retro Pixel Art Constraint: Antialiasing OFF
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-
         for (int row = 0; row < rows; row++) {
             for (int col = 0; col < cols; col++) {
                 int id = tileGrid[row][col];
@@ -136,180 +117,165 @@ public class TileMapLoader {
                 switch (id) {
                     case TILE_GROUND:
                         boolean isTop = row == 0 || tileGrid[row - 1][col] != TILE_GROUND;
-                        drawGroundTile(g, x, y, col, row, isTop);
+                        drawGroundTile(sr, x, y, col, row, isTop);
                         break;
                     case TILE_TRAP:
-                        drawSpikeTrap(g, x, y);
+                        drawSpikeTrap(sr, x, y);
                         break;
                     case TILE_PLATFORM:
                     case TILE_PLATFORM_L:
                     case TILE_PLATFORM_M:
                     case TILE_PLATFORM_R:
-                        drawPlatform(g, x, y, id);
+                        drawPlatform(sr, x, y, id);
                         break;
                     case TILE_ROCK:
-                        drawRock(g, x, y, col, row);
+                        drawRock(sr, x, y);
                         break;
                     case TILE_WALL:
-                        drawWall(g, x, y, col, row);
+                        drawWall(sr, x, y);
                         break;
                     case TILE_COLUMN:
-                        drawColumn(g, x, y);
+                        drawColumn(sr, x, y);
                         break;
                     case TILE_DAMAGED:
-                        drawDamaged(g, x, y, col, row);
+                        drawDamaged(sr, x, y);
                         break;
                     case TILE_STAIR:
-                        drawStair(g, x, y, col);
+                        drawStair(sr, x, y, col);
                         break;
                 }
             }
         }
     }
 
-    // ── Getters ──────────────────────────────────────────────────────────────
+    // Helper to draw outlines without leaving ShapeType.Filled (Better WebGL Performance)
+    private void drawOutline(ShapeRenderer sr, int x, int y, int w, int h) {
+        sr.rect(x, y, w, 1);
+        sr.rect(x, y + h - 1, w, 1);
+        sr.rect(x, y, 1, h);
+        sr.rect(x + w - 1, y, 1, h);
+    }
 
-    public List<Rectangle> getSolidTiles() { return java.util.Collections.unmodifiableList(solidTiles); }
-    public List<int[]> getVowStonePositions() { return java.util.Collections.unmodifiableList(vowStonePositions); }
-    public List<int[]> getEnemyPositions() { return enemyPositions; }
-    public int[] getPlayerSpawn() { return playerSpawn; }
-    public int getRows() { return rows; }
-    public int getCols() { return cols; }
-    public int getTileId(int row, int col) { return tileGrid[row][col]; }
+    private void drawLine(ShapeRenderer sr, int x1, int y1, int x2, int y2) {
+        sr.rectLine(x1, y1, x2, y2, 1);
+    }
 
-    // ── Procedural Pixel Drawing Helpers ─────────────────────────────────────
-    
-    private void drawGroundTile(Graphics2D g, int x, int y, int col, int row, boolean isTop) {
-        g.setColor(flagstone);
-        g.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+    private void drawGroundTile(ShapeRenderer sr, int x, int y, int col, int row, boolean isTop) {
+        sr.setColor(flagstone);
+        sr.rect(x, y, TILE_SIZE, TILE_SIZE);
 
-        // Purple-blue bottom shade tint
-        g.setColor(new Color(90, 40, 130, 90)); 
-        g.fillRect(x, y + TILE_SIZE - 10, TILE_SIZE, 10);
+        sr.setColor(90/255f, 40/255f, 130/255f, 90/255f); 
+        sr.rect(x, y + TILE_SIZE - 10, TILE_SIZE, 10);
 
-        // Staggered mortar lines
-        g.setColor(mortar);
+        sr.setColor(mortar);
         int offset = (row % 2 == 0) ? 0 : TILE_SIZE / 2;
-        g.drawLine(x, y + TILE_SIZE / 2, x + TILE_SIZE, y + TILE_SIZE / 2); 
-        g.drawLine(x + offset, y, x + offset, y + TILE_SIZE / 2); 
+        drawLine(sr, x, y + TILE_SIZE / 2, x + TILE_SIZE, y + TILE_SIZE / 2); 
+        drawLine(sr, x + offset, y, x + offset, y + TILE_SIZE / 2); 
         int offBot = (offset == 0) ? TILE_SIZE / 2 : 0;
-        g.drawLine(x + offBot, y + TILE_SIZE / 2, x + offBot, y + TILE_SIZE); 
+        drawLine(sr, x + offBot, y + TILE_SIZE / 2, x + offBot, y + TILE_SIZE); 
 
         if (isTop) {
-            // Pale gold highlight on top edge
-            g.setColor(paleGold);
-            g.fillRect(x, y, TILE_SIZE, 2);
-            g.setColor(new Color(150, 130, 60)); // Transition gold
-            g.fillRect(x, y + 2, TILE_SIZE, 2);
+            sr.setColor(paleGold);
+            sr.rect(x, y, TILE_SIZE, 2);
+            sr.setColor(150/255f, 130/255f, 60/255f, 1f);
+            sr.rect(x, y + 2, TILE_SIZE, 2);
         } else {
-            g.setColor(mortar);
-            g.drawLine(x, y, x + TILE_SIZE, y);
+            sr.setColor(mortar);
+            drawLine(sr, x, y, x + TILE_SIZE, y);
         }
 
-        g.setColor(Color.BLACK);
-        g.drawRect(x, y, TILE_SIZE - 1, TILE_SIZE - 1);
+        sr.setColor(black);
+        drawOutline(sr, x, y, TILE_SIZE - 1, TILE_SIZE - 1);
     }
 
-    private void drawWall(Graphics2D g, int x, int y, int col, int row) {
-        g.setColor(darkStone);
-        g.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+    private void drawWall(ShapeRenderer sr, int x, int y) {
+        sr.setColor(darkStone);
+        sr.rect(x, y, TILE_SIZE, TILE_SIZE);
+        
+        sr.setColor(90/255f, 40/255f, 130/255f, 60/255f);
+        sr.rect(x, y, TILE_SIZE, TILE_SIZE);
 
-        // Slight purple hue wash
-        g.setColor(new Color(90, 40, 130, 60));
-        g.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+        sr.setColor(mortar);
+        drawOutline(sr, x, y, TILE_SIZE - 1, TILE_SIZE - 1);
+        drawLine(sr, x + 4, y + TILE_SIZE, x + 4, y + 12);
+        drawLine(sr, x + TILE_SIZE - 4, y + TILE_SIZE, x + TILE_SIZE - 4, y + 12);
+        drawLine(sr, x + 4, y + 12, x + 10, y + 4);
+        drawLine(sr, x + TILE_SIZE - 4, y + 12, x + TILE_SIZE - 10, y + 4);
+        drawLine(sr, x + 10, y + 4, x + TILE_SIZE - 10, y + 4); 
 
-        // Blocky gothic arch shadow framing
-        g.setColor(mortar);
-        g.drawRect(x, y, TILE_SIZE - 1, TILE_SIZE - 1);
-        g.drawLine(x + 4, y + TILE_SIZE, x + 4, y + 12);
-        g.drawLine(x + TILE_SIZE - 4, y + TILE_SIZE, x + TILE_SIZE - 4, y + 12);
-        g.drawLine(x + 4, y + 12, x + 10, y + 4);
-        g.drawLine(x + TILE_SIZE - 4, y + 12, x + TILE_SIZE - 10, y + 4);
-        g.drawLine(x + 10, y + 4, x + TILE_SIZE - 10, y + 4); 
-
-        // Highlights
-        g.setColor(midStone);
-        g.fillRect(x + 6, y + 6, TILE_SIZE - 12, TILE_SIZE - 12);
-        g.setColor(highStone);
-        g.drawLine(x + 6, y + 6, x + TILE_SIZE - 6, y + 6);
+        sr.setColor(midStone);
+        sr.rect(x + 6, y + 6, TILE_SIZE - 12, TILE_SIZE - 12);
+        sr.setColor(highStone);
+        drawLine(sr, x + 6, y + 6, x + TILE_SIZE - 6, y + 6);
     }
 
-    private void drawDamaged(Graphics2D g, int x, int y, int col, int row) {
-        drawWall(g, x, y, col, row); 
+    private void drawDamaged(ShapeRenderer sr, int x, int y) {
+        drawWall(sr, x, y); 
         
-        // Deep black crack insets
-        g.setColor(Color.BLACK);
-        g.fillRect(x + 14, y + 4, 4, 6);
-        g.fillRect(x + 10, y + 10, 6, 4);
-        g.fillRect(x + 8, y + 14, 4, 8);
-        g.fillRect(x + 20, y + 18, 6, 4);
+        sr.setColor(black);
+        sr.rect(x + 14, y + 4, 4, 6);
+        sr.rect(x + 10, y + 10, 6, 4);
+        sr.rect(x + 8, y + 14, 4, 8);
+        sr.rect(x + 20, y + 18, 6, 4);
         
-        // Rubble dust at base
-        g.setColor(midStone);
-        g.fillRect(x + 6, y + 26, 4, 4);
-        g.fillRect(x + 22, y + 28, 6, 2);
-        g.setColor(highStone);
-        g.fillRect(x + 8, y + 28, 2, 2);
+        sr.setColor(midStone);
+        sr.rect(x + 6, y + 26, 4, 4);
+        sr.rect(x + 22, y + 28, 6, 2);
+        sr.setColor(highStone);
+        sr.rect(x + 8, y + 28, 2, 2);
     }
 
-    private void drawPlatform(Graphics2D g, int x, int y, int type) {
-        // Base weathered timber
-        g.setColor(woodBase);
-        g.fillRect(x, y + 4, TILE_SIZE, 12);
+    private void drawPlatform(ShapeRenderer sr, int x, int y, int type) {
+        sr.setColor(woodBase);
+        sr.rect(x, y + 4, TILE_SIZE, 12);
         
-        // Highlight grain
-        g.setColor(woodHigh);
-        g.fillRect(x, y + 4, TILE_SIZE, 2);
-        g.drawLine(x + 2, y + 8, x + TILE_SIZE - 4, y + 8);
-        g.drawLine(x + 6, y + 12, x + TILE_SIZE - 2, y + 12);
+        sr.setColor(woodHigh);
+        sr.rect(x, y + 4, TILE_SIZE, 2);
+        drawLine(sr, x + 2, y + 8, x + TILE_SIZE - 4, y + 8);
+        drawLine(sr, x + 6, y + 12, x + TILE_SIZE - 2, y + 12);
 
-        // Shadow under platform
-        g.setColor(new Color(40, 25, 10));
-        g.fillRect(x, y + 14, TILE_SIZE, 4);
+        sr.setColor(40/255f, 25/255f, 10/255f, 1f);
+        sr.rect(x, y + 14, TILE_SIZE, 4);
 
-        // Metal caps and nails
-        g.setColor(new Color(40, 40, 45)); 
         if (type == TILE_PLATFORM_L || type == TILE_PLATFORM) {
-            g.fillRect(x, y + 2, 4, 16);
-            g.setColor(new Color(150, 150, 150)); // Nail
-            g.fillRect(x + 1, y + 6, 2, 2);
-            g.fillRect(x + 1, y + 12, 2, 2);
+            sr.setColor(40/255f, 40/255f, 45/255f, 1f);
+            sr.rect(x, y + 2, 4, 16);
+            sr.setColor(150/255f, 150/255f, 150/255f, 1f);
+            sr.rect(x + 1, y + 6, 2, 2);
+            sr.rect(x + 1, y + 12, 2, 2);
         }
         if (type == TILE_PLATFORM_R || type == TILE_PLATFORM) {
-            g.setColor(new Color(40, 40, 45));
-            g.fillRect(x + TILE_SIZE - 4, y + 2, 4, 16);
-            g.setColor(new Color(150, 150, 150)); // Nail
-            g.fillRect(x + TILE_SIZE - 3, y + 6, 2, 2);
-            g.fillRect(x + TILE_SIZE - 3, y + 12, 2, 2);
+            sr.setColor(40/255f, 40/255f, 45/255f, 1f);
+            sr.rect(x + TILE_SIZE - 4, y + 2, 4, 16);
+            sr.setColor(150/255f, 150/255f, 150/255f, 1f);
+            sr.rect(x + TILE_SIZE - 3, y + 6, 2, 2);
+            sr.rect(x + TILE_SIZE - 3, y + 12, 2, 2);
         }
     }
 
-    private void drawColumn(Graphics2D g, int x, int y) {
-        g.setColor(ivory);
-        g.fillRect(x + 6, y, TILE_SIZE - 12, TILE_SIZE);
+    private void drawColumn(ShapeRenderer sr, int x, int y) {
+        sr.setColor(ivory);
+        sr.rect(x + 6, y, TILE_SIZE - 12, TILE_SIZE);
         
-        // Fluted ivory shadows
-        g.setColor(new Color(140, 125, 90));
-        g.drawLine(x + 10, y, x + 10, y + TILE_SIZE);
-        g.drawLine(x + 16, y, x + 16, y + TILE_SIZE);
-        g.drawLine(x + 22, y, x + 22, y + TILE_SIZE);
+        sr.setColor(140/255f, 125/255f, 90/255f, 1f);
+        drawLine(sr, x + 10, y, x + 10, y + TILE_SIZE);
+        drawLine(sr, x + 16, y, x + 16, y + TILE_SIZE);
+        drawLine(sr, x + 22, y, x + 22, y + TILE_SIZE);
 
-        // Flute highlights
-        g.setColor(new Color(220, 210, 180));
-        g.drawLine(x + 9, y, x + 9, y + TILE_SIZE);
-        g.drawLine(x + 15, y, x + 15, y + TILE_SIZE);
-        g.drawLine(x + 21, y, x + 21, y + TILE_SIZE);
+        sr.setColor(220/255f, 210/255f, 180/255f, 1f);
+        drawLine(sr, x + 9, y, x + 9, y + TILE_SIZE);
+        drawLine(sr, x + 15, y, x + 15, y + TILE_SIZE);
+        drawLine(sr, x + 21, y, x + 21, y + TILE_SIZE);
 
-        // Ornate Caps with pale gold trim
-        g.setColor(paleGold);
-        g.fillRect(x + 4, y, TILE_SIZE - 8, 3);
-        g.fillRect(x + 4, y + TILE_SIZE - 3, TILE_SIZE - 8, 3);
+        sr.setColor(paleGold);
+        sr.rect(x + 4, y, TILE_SIZE - 8, 3);
+        sr.rect(x + 4, y + TILE_SIZE - 3, TILE_SIZE - 8, 3);
         
-        g.setColor(mortar);
-        g.drawRect(x + 4, y, TILE_SIZE - 8, TILE_SIZE - 1);
+        sr.setColor(mortar);
+        drawOutline(sr, x + 4, y, TILE_SIZE - 8, TILE_SIZE - 1);
     }
 
-    private void drawStair(Graphics2D g, int x, int y, int col) {
+    private void drawStair(ShapeRenderer sr, int x, int y, int col) {
         boolean faceRight = (col % 2 == 0);
         for (int i = 0; i < 4; i++) {
             int stepHeight = 8;
@@ -317,79 +283,68 @@ public class TileMapLoader {
             int drawX = faceRight ? x : x + TILE_SIZE - stepWidth;
             int drawY = y + i * stepHeight;
             
-            g.setColor(darkStone);
-            g.fillRect(drawX, drawY, stepWidth, stepHeight);
+            sr.setColor(darkStone);
+            sr.rect(drawX, drawY, stepWidth, stepHeight);
             
-            // Pale gold edge highlight
-            g.setColor(paleGold);
-            g.fillRect(drawX, drawY, stepWidth, 2);
+            sr.setColor(paleGold);
+            sr.rect(drawX, drawY, stepWidth, 2);
             
-            g.setColor(Color.BLACK);
-            g.drawRect(drawX, drawY, stepWidth, stepHeight);
+            sr.setColor(black);
+            drawOutline(sr, drawX, drawY, stepWidth, stepHeight);
         }
     }
 
-    private void drawRock(Graphics2D g, int x, int y, int col, int row) {
-        g.setColor(new Color(20, 20, 25)); // near-black
-        g.fillRect(x + 2, y + 4, TILE_SIZE - 4, TILE_SIZE - 4);
+    private void drawRock(ShapeRenderer sr, int x, int y) {
+        sr.setColor(20/255f, 20/255f, 25/255f, 1f);
+        sr.rect(x + 2, y + 4, TILE_SIZE - 4, TILE_SIZE - 4);
         
-        // Blocky blue-grey facets
-        g.setColor(new Color(50, 60, 80));
-        g.fillRect(x + 6, y + 8, 14, 10);
-        g.fillRect(x + 12, y + 16, 12, 12);
+        sr.setColor(50/255f, 60/255f, 80/255f, 1f);
+        sr.rect(x + 6, y + 8, 14, 10);
+        sr.rect(x + 12, y + 16, 12, 12);
 
-        g.setColor(ghostBlue);
-        g.fillRect(x + 8, y + 10, 8, 6);
+        sr.setColor(ghostBlue);
+        sr.rect(x + 8, y + 10, 8, 6);
         
-        // Cold white highlight
-        g.setColor(new Color(220, 230, 255));
-        g.fillRect(x + 6, y + 8, 8, 2);
-        g.fillRect(x + 12, y + 16, 8, 2);
+        sr.setColor(220/255f, 230/255f, 255/255f, 1f);
+        sr.rect(x + 6, y + 8, 8, 2);
+        sr.rect(x + 12, y + 16, 8, 2);
         
-        g.setColor(Color.BLACK);
-        g.drawRect(x + 2, y + 4, TILE_SIZE - 5, TILE_SIZE - 5);
+        sr.setColor(black);
+        drawOutline(sr, x + 2, y + 4, TILE_SIZE - 5, TILE_SIZE - 5);
     }
 
-    private void drawSpikeTrap(Graphics2D g, int x, int y) {
-        // Black iron base
-        g.setColor(trapBase);
-        g.fillRect(x, y + TILE_SIZE - 8, TILE_SIZE, 8);
-        g.setColor(mortar);
-        g.fillRect(x, y + TILE_SIZE - 8, TILE_SIZE, 2);
+    private void drawSpikeTrap(ShapeRenderer sr, int x, int y) {
+        sr.setColor(trapBase);
+        sr.rect(x, y + TILE_SIZE - 8, TILE_SIZE, 8);
+        sr.setColor(mortar);
+        sr.rect(x, y + TILE_SIZE - 8, TILE_SIZE, 2);
 
-        // Silver spikes
-        g.setColor(new Color(150, 150, 160));
         int[] spikeX = {4, 16, 28};
         for (int sx : spikeX) {
-            g.fillRect(x + sx - 3, y + TILE_SIZE - 12, 6, 4);
-            g.fillRect(x + sx - 2, y + TILE_SIZE - 18, 4, 6);
-            g.fillRect(x + sx - 1, y + TILE_SIZE - 24, 2, 6);
+            sr.setColor(150/255f, 150/255f, 160/255f, 1f);
+            sr.rect(x + sx - 3, y + TILE_SIZE - 12, 6, 4);
+            sr.rect(x + sx - 2, y + TILE_SIZE - 18, 4, 6);
+            sr.rect(x + sx - 1, y + TILE_SIZE - 24, 2, 6);
             
-            // Spike highlight
-            g.setColor(Color.WHITE);
-            g.fillRect(x + sx - 1, y + TILE_SIZE - 24, 1, 10);
+            sr.setColor(Color.WHITE);
+            sr.rect(x + sx - 1, y + TILE_SIZE - 24, 1, 10);
             
-            // Ghostly blue pixel halo
-            g.setColor(ghostBlue);
-            g.fillRect(x + sx - 2, y + TILE_SIZE - 25, 1, 1);
-            g.fillRect(x + sx, y + TILE_SIZE - 25, 1, 1);
-            g.fillRect(x + sx - 1, y + TILE_SIZE - 26, 1, 1);
-
-            g.setColor(new Color(150, 150, 160)); // reset
+            sr.setColor(ghostBlue);
+            sr.rect(x + sx - 2, y + TILE_SIZE - 25, 1, 1);
+            sr.rect(x + sx, y + TILE_SIZE - 25, 1, 1);
+            sr.rect(x + sx - 1, y + TILE_SIZE - 26, 1, 1);
         }
         
-        // Blood red drips
-        g.setColor(bloodRed);
-        g.fillRect(x + 15, y + TILE_SIZE - 22, 2, 2);
-        g.fillRect(x + 16, y + TILE_SIZE - 18, 2, 4);
-        g.fillRect(x + 28, y + TILE_SIZE - 20, 2, 2);
-        g.fillRect(x + 6, y + TILE_SIZE - 8, 4, 2); 
+        sr.setColor(bloodRed);
+        sr.rect(x + 15, y + TILE_SIZE - 22, 2, 2);
+        sr.rect(x + 16, y + TILE_SIZE - 18, 2, 4);
+        sr.rect(x + 28, y + TILE_SIZE - 20, 2, 2);
+        sr.rect(x + 6, y + TILE_SIZE - 8, 4, 2); 
     }
 
     private int parseToken(char token, int row, int col) {
         int xPos = col * TILE_SIZE;
         int yPos = row * TILE_SIZE;
-        
         switch (token) {
             case '1': return TILE_GROUND;
             case '2': return TILE_PLATFORM;
@@ -414,4 +369,9 @@ public class TileMapLoader {
             default: return TILE_AIR;
         }
     }
+
+    public List<Rectangle> getSolidTiles() { return Collections.unmodifiableList(solidTiles); }
+    public List<int[]> getVowStonePositions() { return Collections.unmodifiableList(vowStonePositions); }
+    public List<int[]> getEnemyPositions() { return enemyPositions; }
+    public int[] getPlayerSpawn() { return playerSpawn; }
 }

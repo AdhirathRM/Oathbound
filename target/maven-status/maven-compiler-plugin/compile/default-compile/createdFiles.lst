@@ -1,0 +1,7 @@
+com\oathbound\desktop\DesktopLauncher.class
+com\oathbound\core\HUD.class
+com\oathbound\core\TileMapLoader.class
+com\oathbound\core\PhysicsComponent.class
+com\oathbound\core\OathboundGame.class
+com\oathbound\core\VowStone.class
+com\oathbound\core\Player.class

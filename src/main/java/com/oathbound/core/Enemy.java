@@ -1,13 +1,14 @@
 package com.oathbound.core;
 
-import java.awt.Color;
-import java.awt.Graphics2D;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.utils.TimeUtils;
 import java.awt.Rectangle;
 import java.util.List;
 
 /**
  * PB-013 — Basic Enemy
- * A patrolling red block that takes damage.
+ * Ported to LibGDX. Uses ShapeRenderer and TimeUtils.
  */
 public class Enemy {
 
@@ -19,9 +20,9 @@ public class Enemy {
     private int health = 3;
     private boolean active = true;
     private int direction = 1; // 1 = Right, -1 = Left
-    private final float moveSpeed = 80f; // Slower than the player
+    private final float moveSpeed = 80f;
 
-    // Invincibility Frames (I-Frames) to prevent taking rapid-fire damage
+    // Invincibility Frames (I-Frames)
     private long lastDamageTime = 0;
     private final long I_FRAME_DURATION = 400;
 
@@ -34,7 +35,8 @@ public class Enemy {
         if (!active) return;
 
         physics.velocityX = moveSpeed * direction;
-        physics.update(dt, bounds, solidTiles, GameWindow.WIDTH, GameWindow.HEIGHT);
+        // Replaced GameWindow constraints with fixed screen size for now
+        physics.update(dt, bounds, solidTiles, 1280, 736); 
 
         // Turn around if it hits a wall
         if (physics.velocityX == 0) {
@@ -43,7 +45,7 @@ public class Enemy {
     }
 
     public void takeDamage(int damage) {
-        long now = System.currentTimeMillis();
+        long now = TimeUtils.millis();
         if (now - lastDamageTime >= I_FRAME_DURATION) {
             health -= damage;
             lastDamageTime = now;
@@ -56,16 +58,16 @@ public class Enemy {
         }
     }
 
-    public void render(Graphics2D g) {
+    public void render(ShapeRenderer sr) {
         if (!active) return;
         
         // Flash white when damaged, otherwise red
-        if (System.currentTimeMillis() - lastDamageTime < 150) {
-            g.setColor(Color.WHITE);
+        if (TimeUtils.millis() - lastDamageTime < 150) {
+            sr.setColor(Color.WHITE);
         } else {
-            g.setColor(Color.RED);
+            sr.setColor(Color.RED);
         }
-        g.fillRect(bounds.x, bounds.y, width, height);
+        sr.rect(bounds.x, bounds.y, width, height);
     }
 
     public boolean isActive() { return active; }

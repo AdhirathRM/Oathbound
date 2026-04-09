@@ -1,12 +1,13 @@
 package com.oathbound.core;
 
-import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.Rectangle;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import java.awt.Rectangle; // Kept for PhysicsComponent interoperability
 
 /**
  * PB-020 — Vow Stone
  * The level's goal point. Touching this triggers level completion.
+ * Ported to LibGDX ShapeRenderer.
  */
 public class VowStone {
     private final Rectangle bounds;
@@ -18,13 +19,13 @@ public class VowStone {
         this.bounds = new Rectangle(x, y, width, height);
     }
 
-    public void render(Graphics2D g) {
+    public void render(ShapeRenderer sr) {
         if (activated) {
-            g.setColor(new Color(100, 255, 255)); // Glowing Cyan
+            sr.setColor(100/255f, 1f, 1f, 1f); // Glowing Cyan (R, G, B, A)
         } else {
-            g.setColor(new Color(50, 50, 150)); // Dormant Blue
+            sr.setColor(50/255f, 50/255f, 150/255f, 1f); // Dormant Blue
         }
-        g.fillRect(bounds.x, bounds.y, width, height);
+        sr.rect(bounds.x, bounds.y, width, height);
     }
 
     public boolean checkCollision(Rectangle playerBounds) {

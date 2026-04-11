@@ -12,8 +12,10 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.ScreenUtils;
+import com.badlogic.gdx.utils.TimeUtils;
 import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,12 +32,13 @@ public class OathboundGame extends ApplicationAdapter {
     private BitmapFont smallButtonFont; 
     
     // --- GAME STATES ---
-    public enum GameState { TITLE, PLAYING, LEVEL_COMPLETE, GAME_OVER }
+    public enum GameState { TITLE, RULES, LEVEL_SELECT, PLAYING, LEVEL_COMPLETE, GAME_OVER }
     private GameState gameState = GameState.TITLE;
-    private boolean showingRules = false;
     
     // UI & Background Layers
     private Texture titleScreenTex;
+    private Texture levelSelectTex; 
+    private Texture ruleScreenTex;
     private Texture buttonTex; 
     private Texture button2Tex; 
     private TextureRegion btn2Next, btn2Restart, btn2Menu; 
@@ -52,15 +55,19 @@ public class OathboundGame extends ApplicationAdapter {
     private VowStone vowStone;
     private List<Enemy> enemies;
     private List<Projectile> projectiles;
+    private List<Projectile> enemyProjectiles;
+    private List<HealDrop> healDrops;
+    private Boss boss;
 
     // Level & Character Management
     private int currentLevel = 1;
-    private final int MAX_LEVELS = 9;
+    private final int MAX_LEVELS = 10;
     private int currentCharacterIndex = 0; 
     
     private int spawnX;
     private int spawnY;
     private float playerDamageTimer = 0f;
+    private float bossDeathTimer = 0f;
 
     @Override
     public void create() {
@@ -68,7 +75,7 @@ public class OathboundGame extends ApplicationAdapter {
         shapeRenderer = new ShapeRenderer();
         
         camera = new OrthographicCamera();
-        camera.setToOrtho(true, 1280, 736);
+        camera.setToOrtho(true, 1280, 736); // y-down coordinate system
 
         if (Gdx.files.internal("fonts/medieval.fnt").exists()) {
             uiFont = new BitmapFont(Gdx.files.internal("fonts/medieval.fnt"), true);
@@ -100,6 +107,15 @@ public class OathboundGame extends ApplicationAdapter {
         if (Gdx.files.internal("sprites/title_screen.png").exists()) {
             titleScreenTex = new Texture(Gdx.files.internal("sprites/title_screen.png"));
         }
+        
+        if (Gdx.files.internal("sprites/level_select.png").exists()) {
+            levelSelectTex = new Texture(Gdx.files.internal("sprites/level_select.png"));
+        }
+        
+        if (Gdx.files.internal("sprites/rule_screen.png").exists()) {
+            ruleScreenTex = new Texture(Gdx.files.internal("sprites/rule_screen.png"));
+        }
+        
         if (Gdx.files.internal("sprites/button.png").exists()) {
             buttonTex = new Texture(Gdx.files.internal("sprites/button.png"));
         }
@@ -136,6 +152,8 @@ public class OathboundGame extends ApplicationAdapter {
         mapLoader = new TileMapLoader();
         enemies = new ArrayList<>();
         projectiles = new ArrayList<>();
+        enemyProjectiles = new ArrayList<>();
+        healDrops = new ArrayList<>();
         
         loadLevel(currentLevel, 5);
     }
@@ -143,6 +161,11 @@ public class OathboundGame extends ApplicationAdapter {
     private void loadLevel(int level, int startingHealth) {
         enemies.clear();
         projectiles.clear(); 
+        enemyProjectiles.clear();
+        healDrops.clear();
+        if (boss != null) boss.dispose();
+        boss = null;
+        bossDeathTimer = 0f; 
         
         String levelPath = "levels/level_" + level + ".txt";
         System.out.println("Loading Level: " + levelPath);
@@ -164,6 +187,12 @@ public class OathboundGame extends ApplicationAdapter {
 
         for (int[] ePos : mapLoader.getEnemyPositions()) {
             enemies.add(new Enemy(ePos[0], ePos[1]));
+        }
+
+        if (level == 10) {
+            boss = new Boss(1000, 200); 
+            if (vowStone != null) vowStone.dispose();
+            vowStone = null; // Hide the vow stone until boss is defeated
         }
     }
 
@@ -204,6 +233,10 @@ public class OathboundGame extends ApplicationAdapter {
         
         if (gameState == GameState.TITLE) {
             renderTitleScreen();
+        } else if (gameState == GameState.RULES) {
+            renderRulesScreen();
+        } else if (gameState == GameState.LEVEL_SELECT) {
+            renderLevelSelect();
         } else if (gameState == GameState.PLAYING) {
             renderGameplay();
         } else if (gameState == GameState.LEVEL_COMPLETE) {
@@ -219,7 +252,6 @@ public class OathboundGame extends ApplicationAdapter {
         float mx = mousePos.x;
         float my = mousePos.y;
 
-        // UPDATED: Scaled up Title buttons to 460x240
         Rectangle playBtn = new Rectangle((1280 / 2) - 480, 460, 460, 240);
         Rectangle rulesBtn = new Rectangle((1280 / 2) + 20, 460, 460, 240);
 
@@ -263,15 +295,59 @@ public class OathboundGame extends ApplicationAdapter {
             }
         }
 
-        if (showingRules) {
-            shapeRenderer.setColor(0.05f, 0.05f, 0.1f, 0.85f); 
-            shapeRenderer.rect(0, 0, 1280, 736);
-            
-            int bx = 290;
-            int by = 120;
-            int bw = 700;
-            int bh = 500;
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
 
+        if (playHover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+            gameState = GameState.LEVEL_SELECT;
+        }
+        
+        if (rulesHover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+            gameState = GameState.RULES;
+        }
+
+        batch.begin();
+        Color customGold = Color.valueOf("ffe14d");
+
+        buttonFont.setColor(playHover ? Color.WHITE : customGold);
+        GlyphLayout playLayout = new GlyphLayout(buttonFont, "PLAY");
+        buttonFont.draw(batch, playLayout, playBtn.x + (playBtn.width - playLayout.width) / 2, playBtn.y + (playBtn.height - playLayout.height) / 2);
+
+        buttonFont.setColor(rulesHover ? Color.WHITE : customGold);
+        GlyphLayout rulesLayout = new GlyphLayout(buttonFont, "RULES");
+        buttonFont.draw(batch, rulesLayout, rulesBtn.x + (rulesBtn.width - rulesLayout.width) / 2, rulesBtn.y + (rulesBtn.height - rulesLayout.height) / 2);
+        batch.end();
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            gameState = GameState.LEVEL_SELECT;
+        }
+    }
+
+    private void renderRulesScreen() {
+        Vector3 mousePos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
+        camera.unproject(mousePos);
+        float mx = mousePos.x;
+        float my = mousePos.y;
+
+        batch.begin();
+        if (ruleScreenTex != null) {
+            batch.draw(ruleScreenTex, 0, 0, 1280, 736, 0, 0, ruleScreenTex.getWidth(), ruleScreenTex.getHeight(), false, true);
+        } else if (bgLayer1 != null) {
+            batch.draw(bgLayer1, 0, 0, 1280, 736, 0, 0, bgLayer1.getWidth(), bgLayer1.getHeight(), false, true);
+        }
+        batch.end();
+
+        int bx = 240;
+        int by = 60;
+        int bw = 800;
+        int bh = 616;
+
+        if (ruleScreenTex == null) {
+            Gdx.gl.glEnable(GL20.GL_BLEND);
+            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+            // Draw ornate scroll-like box
             shapeRenderer.setColor(0.8f, 0.65f, 0.15f, 1f);
             shapeRenderer.rect(bx - 6, by - 6, bw + 12, bh + 12);
             shapeRenderer.setColor(0.6f, 0.45f, 0.1f, 1f); 
@@ -288,61 +364,136 @@ public class OathboundGame extends ApplicationAdapter {
 
             shapeRenderer.end();
             Gdx.gl.glDisable(GL20.GL_BLEND);
-            
-            batch.begin();
-            GlyphLayout titleLayout = new GlyphLayout(uiFont, "HOW TO PLAY");
-            uiFont.setColor(Color.GOLD);
-            uiFont.draw(batch, titleLayout, bx + (bw - titleLayout.width) / 2, by + 70);
-            
-            uiFont.setColor(Color.WHITE);
-            int textX = bx + 80;
-            int textY = by + 150;
-            int spacing = 65;
-
-            uiFont.draw(batch, "Move: A / D or Left / Right", textX, textY);
-            uiFont.draw(batch, "Jump: W or Space", textX, textY + spacing);
-            uiFont.draw(batch, "Attack: J or Z", textX, textY + spacing * 2);
-            uiFont.draw(batch, "Switch Class: TAB", textX, textY + spacing * 3);
-            
-            uiFont.setColor(Color.FIREBRICK);
-            GlyphLayout bottomLayout = new GlyphLayout(uiFont, "Reach the Vow Stone to advance");
-            uiFont.draw(batch, bottomLayout, bx + (bw - bottomLayout.width) / 2, by + bh - 40);
-            batch.end();
-
-            if (Gdx.input.isButtonJustPressed(Input.Buttons.LEFT) || Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-                showingRules = false;
-            }
-            return; 
         }
-
-        shapeRenderer.end();
-        Gdx.gl.glDisable(GL20.GL_BLEND);
-
-        if (playHover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
-            currentLevel = 1;
-            loadLevel(currentLevel, 5);
-            gameState = GameState.PLAYING;
-        }
-        
-        if (rulesHover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) showingRules = true;
 
         batch.begin();
-        Color customGold = Color.valueOf("ffe14d");
+        GlyphLayout titleLayout = new GlyphLayout(largeTitleFont, "THE OATHBOUND RULES");
+        largeTitleFont.setColor(Color.GOLD);
+        largeTitleFont.draw(batch, titleLayout, bx + (bw - titleLayout.width) / 2, by + 33);
 
-        buttonFont.setColor(playHover ? Color.WHITE : customGold);
-        GlyphLayout playLayout = new GlyphLayout(buttonFont, "PLAY");
-        buttonFont.draw(batch, playLayout, playBtn.x + (playBtn.width - playLayout.width) / 2, playBtn.y + (playBtn.height - playLayout.height) / 2);
+        uiFont.setColor(Color.WHITE);
+        int textX = bx; // Moved left slightly to give more horizontal room
+        int textY = by + 113;
+        int spacing = 45;
 
-        buttonFont.setColor(rulesHover ? Color.WHITE : customGold);
-        GlyphLayout rulesLayout = new GlyphLayout(buttonFont, "RULES");
-        buttonFont.draw(batch, rulesLayout, rulesBtn.x + (rulesBtn.width - rulesLayout.width) / 2, rulesBtn.y + (rulesBtn.height - rulesLayout.height) / 2);
+        // Controls Section
+        uiFont.setColor(Color.GOLD);
+        uiFont.draw(batch, "CONTROLS:", textX - 30, textY);
+        uiFont.setColor(Color.WHITE);
+        uiFont.draw(batch, "- Move: A / D or Left / Right", textX, textY + spacing);
+        uiFont.draw(batch, "- Jump: W or Space", textX, textY + spacing * 2);
+        uiFont.draw(batch, "- Attack: J or Z", textX, textY + spacing * 3);
+        uiFont.draw(batch, "- Switch Class: TAB", textX, textY + spacing * 4);
+
+        textY += spacing * 5 + 20;
+        
+        // Trials Section
+        uiFont.setColor(Color.GOLD);
+        uiFont.draw(batch, "THE TRIALS:", textX - 30, textY);
+        uiFont.setColor(Color.WHITE);
+        uiFont.draw(batch, "Reach the Vow Stone at the end of each stage", textX, textY + spacing);
+        uiFont.draw(batch, "to advance to the next trial.", textX, textY + spacing * 1.8f);
+        
+        textY += spacing * 2.5f + 10;
+
+        // Level 10 Lore Section
+        uiFont.setColor(Color.FIREBRICK);
+        uiFont.draw(batch, "TRIAL 10: THE CRIMSON SOVEREIGN", textX - 30, textY);
+        uiFont.setColor(Color.WHITE);
+        // Made sentences shorter so they easily fit inside without overlapping the edges
+        uiFont.draw(batch, "Lord Malakor awaits at the pinnacle. Beware his", textX, textY + spacing);
+        uiFont.draw(batch, "Lifesteal, teleportation, and Phase 2", textX, textY + spacing * 1.8f);
+        uiFont.draw(batch, "transformation. Striking him may cause Crimson", textX, textY + spacing * 2.6f);
+        uiFont.draw(batch, "Essence (Heals) to drop. Survive and conquer!", textX, textY + spacing * 3.4f);
+
+        // Back Button (Top Left)
+        Rectangle backBtn = new Rectangle(30, 30, 200, 80);
+        boolean backHover = backBtn.contains(mx, my);
+
+        if (buttonTex != null) {
+            batch.setColor(backHover ? new Color(0.8f, 0.6f, 1.0f, 1f) : Color.WHITE);
+            batch.draw(buttonTex, backBtn.x, backBtn.y, backBtn.width, backBtn.height, 0, 0, buttonTex.getWidth(), buttonTex.getHeight(), false, true);
+            batch.setColor(Color.WHITE);
+        }
+
+        smallButtonFont.setColor(backHover ? Color.WHITE : Color.valueOf("ffe14d"));
+        GlyphLayout backLayout = new GlyphLayout(smallButtonFont, "BACK");
+        smallButtonFont.draw(batch, backLayout, backBtn.x + (backBtn.width - backLayout.width) / 2, backBtn.y + (backBtn.height - backLayout.height) / 2 + 3);
         batch.end();
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-            currentLevel = 1;
-            loadLevel(currentLevel, 5); 
-            gameState = GameState.PLAYING;
+        // Handle Back interaction
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || 
+           (backHover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT))) {
+            gameState = GameState.TITLE;
         }
+    }
+
+    private void renderLevelSelect() {
+        Vector3 mousePos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
+        camera.unproject(mousePos);
+        float mx = mousePos.x;
+        float my = mousePos.y;
+
+        batch.begin();
+        if (levelSelectTex != null) {
+            batch.draw(levelSelectTex, 0, 0, 1280, 736, 0, 0, levelSelectTex.getWidth(), levelSelectTex.getHeight(), false, true);
+        } else if (bgLayer1 != null) {
+            batch.draw(bgLayer1, 0, 0, 1280, 736, 0, 0, bgLayer1.getWidth(), bgLayer1.getHeight(), false, true);
+        }
+        
+        int cols = 5;
+        int rows = 2;
+        int btnW = 140; 
+        int btnH = 140; 
+        int spacing = 40;
+        int startX = (1280 - (cols * btnW + (cols - 1) * spacing)) / 2;
+        int startY = 240;
+
+        for (int i = 0; i < 10; i++) {
+            int row = i / cols;
+            int col = i % cols;
+            int x = startX + col * (btnW + spacing);
+            int y = startY + row * (btnH + spacing);
+            
+            Rectangle btnRect = new Rectangle(x, y, btnW, btnH);
+            boolean hovered = btnRect.contains(mx, my);
+            
+            if (buttonTex != null) {
+                batch.setColor(hovered ? new Color(0.8f, 0.6f, 1.0f, 1f) : Color.WHITE);
+                batch.draw(buttonTex, x, y, btnW, btnH, 0, 0, buttonTex.getWidth(), buttonTex.getHeight(), false, true);
+            }
+            
+            buttonFont.setColor(hovered ? Color.WHITE : Color.valueOf("ffe14d"));
+            GlyphLayout numLayout = new GlyphLayout(buttonFont, String.valueOf(i + 1));
+            // Moved the text up by 10 pixels compared to the previous version, and down by 3 px from the last iteration, and 1 px down again.
+            buttonFont.draw(batch, numLayout, x + (btnW - numLayout.width) / 2, y + (btnH - numLayout.height) / 2 - 1);
+            
+            if (hovered && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+                currentLevel = i + 1;
+                loadLevel(currentLevel, 5);
+                gameState = GameState.PLAYING;
+            }
+        }
+        
+        // Add Back Button (Bottom Left)
+        Rectangle backBtn = new Rectangle(30, 736 - 110, 200, 80);
+        boolean backHover = backBtn.contains(mx, my);
+        
+        if (buttonTex != null) {
+            batch.setColor(backHover ? new Color(0.8f, 0.6f, 1.0f, 1f) : Color.WHITE);
+            batch.draw(buttonTex, backBtn.x, backBtn.y, backBtn.width, backBtn.height, 0, 0, buttonTex.getWidth(), buttonTex.getHeight(), false, true);
+        }
+        
+        smallButtonFont.setColor(backHover ? Color.WHITE : Color.valueOf("ffe14d"));
+        GlyphLayout backLayout = new GlyphLayout(smallButtonFont, "BACK");
+        smallButtonFont.draw(batch, backLayout, backBtn.x + (backBtn.width - backLayout.width) / 2, backBtn.y + (backBtn.height - backLayout.height) / 2 + 3);
+        
+        if (backHover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+            gameState = GameState.TITLE;
+        }
+
+        batch.setColor(Color.WHITE);
+        batch.end();
     }
 
     private void renderLevelComplete() {
@@ -353,16 +504,19 @@ public class OathboundGame extends ApplicationAdapter {
 
         Rectangle topBox = new Rectangle((1280 / 2) - 590, 5, 1180, 480); 
 
+        // Hide next button on Level 10
+        boolean showNext = (currentLevel < MAX_LEVELS);
+
         int btnW = 560;
         int btnH = 96; 
-        int startY = 410;
+        int startY = showNext ? 410 : 460;
         int gap = btnH + 12; 
 
         Rectangle nextBtn = new Rectangle((1280 / 2) - (btnW / 2), startY, btnW, btnH);
-        Rectangle restartBtn = new Rectangle((1280 / 2) - (btnW / 2), startY + gap, btnW, btnH);
-        Rectangle menuBtn = new Rectangle((1280 / 2) - (btnW / 2), startY + gap * 2, btnW, btnH);
+        Rectangle restartBtn = new Rectangle((1280 / 2) - (btnW / 2), showNext ? startY + gap : startY, btnW, btnH);
+        Rectangle menuBtn = new Rectangle((1280 / 2) - (btnW / 2), showNext ? startY + gap * 2 : startY + gap, btnW, btnH);
 
-        boolean nextHover = nextBtn.contains(mx, my);
+        boolean nextHover = showNext && nextBtn.contains(mx, my);
         boolean restartHover = restartBtn.contains(mx, my);
         boolean menuHover = menuBtn.contains(mx, my);
 
@@ -378,8 +532,10 @@ public class OathboundGame extends ApplicationAdapter {
         }
 
         if (button2Tex != null) {
-            if (nextHover) batch.setColor(0.8f, 0.6f, 1.0f, 1f); else batch.setColor(Color.WHITE);
-            batch.draw(btn2Next, nextBtn.x, nextBtn.y, nextBtn.width, nextBtn.height);
+            if (showNext) {
+                if (nextHover) batch.setColor(0.8f, 0.6f, 1.0f, 1f); else batch.setColor(Color.WHITE);
+                batch.draw(btn2Next, nextBtn.x, nextBtn.y, nextBtn.width, nextBtn.height);
+            }
 
             if (restartHover) batch.setColor(0.8f, 0.6f, 1.0f, 1f); else batch.setColor(Color.WHITE);
             batch.draw(btn2Restart, restartBtn.x, restartBtn.y, restartBtn.width, restartBtn.height);
@@ -398,16 +554,21 @@ public class OathboundGame extends ApplicationAdapter {
         if (button2Tex == null) {
             shapeRenderer.setColor(0.15f, 0.15f, 0.2f, 0.9f);
             shapeRenderer.rect(topBox.x, topBox.y, topBox.width, topBox.height);
-            shapeRenderer.rect(nextBtn.x, nextBtn.y, nextBtn.width, nextBtn.height);
+            if (showNext) {
+                shapeRenderer.rect(nextBtn.x, nextBtn.y, nextBtn.width, nextBtn.height);
+            }
             shapeRenderer.rect(restartBtn.x, restartBtn.y, restartBtn.width, restartBtn.height);
             shapeRenderer.rect(menuBtn.x, menuBtn.y, menuBtn.width, menuBtn.height);
         }
 
-        if (nextHover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+        if (showNext && nextHover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
             currentLevel++;
-            if (currentLevel > MAX_LEVELS) currentLevel = 1; 
-            loadLevel(currentLevel, player.getHealth());
-            gameState = GameState.PLAYING;
+            if (currentLevel > MAX_LEVELS) {
+                gameState = GameState.TITLE; 
+            } else {
+                loadLevel(currentLevel, player.getHealth());
+                gameState = GameState.PLAYING;
+            }
         }
         if (restartHover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
             loadLevel(currentLevel, 5); 
@@ -430,11 +591,13 @@ public class OathboundGame extends ApplicationAdapter {
         float topCenterY = topBox.y + (topBox.height / 2);
         largeTitleFont.draw(batch, completeLayout, topBox.x + (topBox.width - completeLayout.width) / 2, topCenterY + (completeLayout.height / 2) - 35);
 
-        smallButtonFont.setColor(nextHover ? Color.WHITE : Color.LIGHT_GRAY);
-        GlyphLayout nextLayout = new GlyphLayout(smallButtonFont, "NEXT TRIAL");
-        float nextTextX = nextBtn.x + (nextBtn.width - nextLayout.width) / 2 - 10; 
-        float nextTextY = nextBtn.y + (nextBtn.height - nextLayout.height) / 2 + 16.5f; 
-        smallButtonFont.draw(batch, nextLayout, nextTextX, nextTextY);
+        if (showNext) {
+            smallButtonFont.setColor(nextHover ? Color.WHITE : Color.LIGHT_GRAY);
+            GlyphLayout nextLayout = new GlyphLayout(smallButtonFont, "NEXT TRIAL");
+            float nextTextX = nextBtn.x + (nextBtn.width - nextLayout.width) / 2 - 10; 
+            float nextTextY = nextBtn.y + (nextBtn.height - nextLayout.height) / 2 + 16.5f; 
+            smallButtonFont.draw(batch, nextLayout, nextTextX, nextTextY);
+        }
 
         smallButtonFont.setColor(restartHover ? Color.WHITE : Color.LIGHT_GRAY);
         GlyphLayout restLayout = new GlyphLayout(smallButtonFont, "RESTART");
@@ -457,7 +620,6 @@ public class OathboundGame extends ApplicationAdapter {
         float mx = mousePos.x;
         float my = mousePos.y;
 
-        // UPDATED: Scaled up Game Over buttons to 460x240 and side-by-side
         int btnW = 460;
         int btnH = 240;
         int startY = 460;
@@ -475,11 +637,9 @@ public class OathboundGame extends ApplicationAdapter {
         }
 
         if (buttonTex != null) {
-            // Draw Restart Button (button.png)
             if (restartHover) batch.setColor(0.8f, 0.6f, 1.0f, 1f); else batch.setColor(Color.WHITE);
             batch.draw(buttonTex, restartBtn.x, restartBtn.y, restartBtn.width, restartBtn.height, 0, 0, buttonTex.getWidth(), buttonTex.getHeight(), false, true);
 
-            // Draw Menu Button (button.png)
             if (menuHover) batch.setColor(0.8f, 0.6f, 1.0f, 1f); else batch.setColor(Color.WHITE);
             batch.draw(buttonTex, menuBtn.x, menuBtn.y, menuBtn.width, menuBtn.height, 0, 0, buttonTex.getWidth(), buttonTex.getHeight(), false, true);
 
@@ -543,6 +703,59 @@ public class OathboundGame extends ApplicationAdapter {
             }
         }
         
+        // --- ENEMY PROJECTILES UPDATE ---
+        for (int i = enemyProjectiles.size() - 1; i >= 0; i--) {
+            Projectile p = enemyProjectiles.get(i);
+            p.update(dt, mapLoader.getSolidTiles());
+            if (p.getBounds().intersects(player.getBounds())) {
+                 if (playerDamageTimer <= 0) {
+                     player.takeDamage(1);
+                     playerDamageTimer = 1.0f;
+                 }
+                 p.deactivate();
+            }
+            if (!p.isActive()) {
+                enemyProjectiles.remove(i);
+            }
+        }
+
+        // --- HEAL DROPS UPDATE ---
+        for (int i = healDrops.size() - 1; i >= 0; i--) {
+            HealDrop drop = healDrops.get(i);
+            drop.update(dt, mapLoader.getSolidTiles()); // Pass solid tiles for gravity
+            
+            if (drop.checkPickUp(player.getBounds())) {
+                player.setHealth(Math.min(player.getMaxHealth(), player.getHealth() + 1));
+            }
+            if (!drop.isActive()) {
+                healDrops.remove(i);
+            }
+        }
+
+        // --- BOSS UPDATE & LOGIC ---
+        if (boss != null) {
+            if (!boss.isDead()) {
+                boss.update(dt, player, mapLoader.getSolidTiles(), enemyProjectiles);
+
+                // Boss taking damage from player
+                if (player.getAttackHitbox().width > 0 && player.getAttackHitbox().intersects(boss.getBounds())) {
+                    int hpBefore = boss.getHealth();
+                    boss.takeDamage(1); 
+                    
+                    // 30% Chance to spawn a heal drop when attacking the boss!
+                    if (boss.getHealth() < hpBefore && MathUtils.randomBoolean(0.30f)) {
+                        healDrops.add(new HealDrop((int)boss.getBounds().x + 30, (int)boss.getBounds().y + 50));
+                    }
+                }
+            } else if (vowStone == null) {
+                // Delay Vow Stone spawn by 2 seconds after death
+                bossDeathTimer += dt;
+                if (bossDeathTimer > 2.0f) {
+                    vowStone = new VowStone((int)boss.getBounds().x, (int)boss.getBounds().y);
+                }
+            }
+        }
+        
         if (playerDamageTimer > 0) playerDamageTimer -= dt;
 
         for (Enemy enemy : enemies) {
@@ -589,6 +802,9 @@ public class OathboundGame extends ApplicationAdapter {
                             break;
                         }
                     }
+                    if (boss != null && !boss.isDead() && p.getBounds().intersects(boss.getBounds())) {
+                        hitEnemyDirectly = true;
+                    }
                 }
                 if ((hitEnemyDirectly || p.isExploding()) && !p.isDamageApplied()) {
                     p.triggerExplosion(); 
@@ -607,6 +823,13 @@ public class OathboundGame extends ApplicationAdapter {
                             e.takeDamage(2); 
                         }
                     }
+                    if (boss != null && !boss.isDead()) {
+                        float ex = boss.getBounds().x + boss.getBounds().width / 2f;
+                        float ey = boss.getBounds().y + boss.getBounds().height / 2f;
+                        if ((float) Math.hypot(cx - ex, cy - ey) <= p.getExplosionRadius()) {
+                            boss.takeDamage(2);
+                        }
+                    }
                 }
             } else {
                 for (Enemy enemy : enemies) {
@@ -616,6 +839,10 @@ public class OathboundGame extends ApplicationAdapter {
                         p.deactivate(); 
                         break; 
                     }
+                }
+                if (boss != null && !boss.isDead() && p.getBounds().intersects(boss.getBounds())) {
+                    boss.takeDamage(1);
+                    p.deactivate();
                 }
             }
         }
@@ -642,7 +869,7 @@ public class OathboundGame extends ApplicationAdapter {
             return; 
         }
 
-        if (vowStone.checkCollision(player.getBounds())) {
+        if (vowStone != null && vowStone.checkCollision(player.getBounds())) {
             gameState = GameState.LEVEL_COMPLETE;
             return; 
         }
@@ -658,11 +885,34 @@ public class OathboundGame extends ApplicationAdapter {
         mapLoader.render(shapeRenderer);
         hud.render(shapeRenderer, player);
         for (Projectile p : projectiles) p.render(shapeRenderer);
+        for (Projectile p : enemyProjectiles) p.render(shapeRenderer);
+        for (HealDrop drop : healDrops) drop.render(shapeRenderer);
+        if (boss != null && !boss.isDead()) boss.renderShapes(shapeRenderer);
         shapeRenderer.end();
 
         batch.begin();
-        vowStone.render(batch);
+        if (vowStone != null) vowStone.render(batch);
         for (Enemy enemy : enemies) enemy.render(batch);
+        
+        // Render the boss and his title text using the existing UI font
+        if (boss != null && !boss.isDead()) {
+            boss.render(batch);
+            
+            float by = 680; // Health bar is at 680
+            
+            // Text glows pulsing red if Boss is in Phase 2 (Health <= 40)
+            if (boss.getHealth() <= 40) {
+                float pulse = 0.7f + 0.3f * MathUtils.sin(TimeUtils.millis() / 150.0f);
+                uiFont.setColor(1f, 0.2f, 0.2f, pulse);
+            } else {
+                uiFont.setColor(Color.WHITE);
+            }
+            
+            GlyphLayout titleLayout = new GlyphLayout(uiFont, "Lord Malakor, the Crimson Sovereign");
+            uiFont.draw(batch, titleLayout, (1280 - titleLayout.width) / 2, by - 35);
+            uiFont.setColor(Color.WHITE); // Reset font color
+        }
+        
         player.render(batch);
         batch.end();
         
@@ -716,6 +966,8 @@ public class OathboundGame extends ApplicationAdapter {
         if (smallButtonFont != null) smallButtonFont.dispose(); 
         
         if (titleScreenTex != null) titleScreenTex.dispose();
+        if (levelSelectTex != null) levelSelectTex.dispose();
+        if (ruleScreenTex != null) ruleScreenTex.dispose();
         if (buttonTex != null) buttonTex.dispose();
         if (button2Tex != null) button2Tex.dispose(); 
         if (levelCompleteTex != null) levelCompleteTex.dispose(); 
@@ -727,5 +979,6 @@ public class OathboundGame extends ApplicationAdapter {
         
         if (player != null) player.dispose();
         if (vowStone != null) vowStone.dispose(); 
+        if (boss != null) boss.dispose();
     }
 }

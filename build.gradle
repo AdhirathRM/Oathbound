@@ -1,0 +1,101 @@
+buildscript {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        gradlePluginPortal()
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        google()
+    }
+    dependencies {
+        classpath 'org.docstr:gwt-gradle-plugin:1.1.29'
+    }
+}
+
+allprojects {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        maven { url "https://oss.sonatype.org/content/repositories/releases/" }
+        maven { url "https://repo1.maven.org/maven2/" }
+    }
+}
+
+ext {
+    appName = "oathbound"
+    gdxVersion = '1.12.1'
+    gwtVersion = '2.8.2'
+}
+
+project(":core") {
+    apply plugin: "java-library"
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+    dependencies {
+        api "com.badlogicgames.gdx:gdx:$gdxVersion"
+    }
+}
+
+project(":desktop") {
+    apply plugin: "java-library"
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+    dependencies {
+        implementation project(":core")
+        implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+        implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+    }
+}
+
+project(":html") {
+    apply plugin: "org.docstr.gwt"
+    apply plugin: "war"
+
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+
+    sourceSets {
+        main {
+            java {
+                srcDirs = ['src', '../core/src']
+            }
+            resources {
+                srcDirs = ['src', '../core/src', '../core/assets']
+            }
+        }
+    }
+
+    dependencies {
+        implementation project(":core")
+        implementation "com.badlogicgames.gdx:gdx-backend-gwt:$gdxVersion"
+        implementation "com.badlogicgames.gdx:gdx-backend-gwt:$gdxVersion:sources"
+        implementation "com.badlogicgames.gdx:gdx:$gdxVersion:sources"
+        implementation "com.google.gwt:gwt-user:2.8.2"
+        implementation "com.google.gwt:gwt-dev:2.8.2"
+    }
+
+    gwt {
+        gwtVersion = "2.8.2"
+        maxHeapSize = "1G"
+        minHeapSize = "1G"
+        modules = ['com.oathbound.GdxDefinition']
+        src = files(
+            file('src'),
+            file('../core/src')
+        )
+    }
+
+    task dist(dependsOn: [clean, compileGwt]) {
+        doLast {
+            file("${project.buildDir}/dist").mkdirs()
+            copy {
+                from "war"
+                into "${project.buildDir}/dist"
+            }
+            copy {
+                from "${project.buildDir}/gwt/out"
+                into "${project.buildDir}/dist"
+            }
+        }
+    }
+}

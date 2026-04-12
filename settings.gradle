@@ -1,0 +1,2 @@
+include 'core', 'desktop', 'html'
+rootProject.name = "oathbound"

@@ -17,3 +17,4 @@ bin/
 
 # Windows
 Thumbs.db
+.vercel

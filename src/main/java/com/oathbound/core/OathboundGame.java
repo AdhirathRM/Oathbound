@@ -441,6 +441,10 @@ public class OathboundGame extends ApplicationAdapter {
             batch.draw(bgLayer1, 0, 0, 1280, 736, 0, 0, bgLayer1.getWidth(), bgLayer1.getHeight(), false, true);
         }
         
+        largeTitleFont.setColor(Color.valueOf("ffe14d"));
+        GlyphLayout titleLayout = new GlyphLayout(largeTitleFont, "CHOOSE YOUR TRIAL");
+        largeTitleFont.draw(batch, titleLayout, (1280 - titleLayout.width) / 2, 100);
+        
         int cols = 5;
         int rows = 2;
         int btnW = 140; 
@@ -465,8 +469,8 @@ public class OathboundGame extends ApplicationAdapter {
             
             buttonFont.setColor(hovered ? Color.WHITE : Color.valueOf("ffe14d"));
             GlyphLayout numLayout = new GlyphLayout(buttonFont, String.valueOf(i + 1));
-            // Moved the text up by 10 pixels compared to the previous version, and down by 3 px from the last iteration, and 1 px down again.
-            buttonFont.draw(batch, numLayout, x + (btnW - numLayout.width) / 2, y + (btnH - numLayout.height) / 2 - 1);
+            // Moved the text down by 1px compared to last update
+            buttonFont.draw(batch, numLayout, x + (btnW - numLayout.width) / 2, y + (btnH - numLayout.height) / 2 - 2);
             
             if (hovered && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
                 currentLevel = i + 1;
@@ -502,11 +506,13 @@ public class OathboundGame extends ApplicationAdapter {
         float mx = mousePos.x;
         float my = mousePos.y;
 
-        Rectangle topBox = new Rectangle((1280 / 2) - 590, 5, 1180, 480); 
+        // Increased topBox width by another 20px to 1215, centered nicely
+        Rectangle topBox = new Rectangle((1280 / 2) - 607, 5, 1215, 480); 
 
         // Hide next button on Level 10
         boolean showNext = (currentLevel < MAX_LEVELS);
 
+        // Reverted the width of the interactive buttons back to 560
         int btnW = 560;
         int btnH = 96; 
         int startY = showNext ? 410 : 460;
@@ -585,7 +591,7 @@ public class OathboundGame extends ApplicationAdapter {
         Color customGold = Color.valueOf("ffe14d");
 
         largeTitleFont.setColor(customGold);
-        String completeText = "TRIAL " + currentLevel + " COMPLETED";
+        String completeText = (currentLevel == MAX_LEVELS) ? "TRIALS COMPLETED" : "TRIAL " + currentLevel + " COMPLETED";
         GlyphLayout completeLayout = new GlyphLayout(largeTitleFont, completeText);
         
         float topCenterY = topBox.y + (topBox.height / 2);
@@ -848,19 +854,22 @@ public class OathboundGame extends ApplicationAdapter {
         }
 
         boolean hitSpikes = false;
-        if (playerDamageTimer <= 0) { 
-            for (Rectangle trap : mapLoader.getTrapTiles()) {
-                if (player.getBounds().intersects(trap)) {
-                    hitSpikes = true;
-                    break;
-                }
+        // Check for spikes ALWAYS, so the player never gets stuck in them while invincible
+        for (Rectangle trap : mapLoader.getTrapTiles()) {
+            if (player.getBounds().intersects(trap)) {
+                hitSpikes = true;
+                break;
             }
         }
 
         if (player.getBounds().y > 800 || hitSpikes) {
-            int remainingHealth = player.getHealth() - 1;
-            player.setHealth(remainingHealth);
-            if (remainingHealth > 0) {
+            // Only take health away if vulnerable, or if falling completely off the map
+            if (playerDamageTimer <= 0 || player.getBounds().y > 800) {
+                int remainingHealth = player.getHealth() - 1;
+                player.setHealth(remainingHealth);
+            }
+            
+            if (player.getHealth() > 0) {
                 player.resetPosition(spawnX, spawnY); 
                 playerDamageTimer = 1.0f; 
             } else {

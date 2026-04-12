@@ -249,6 +249,14 @@ public class Boss {
         if (health <= 0) isDead = true;
     }
 
+    // --- NEW: FORCE TELEPORT (CALLED BY GAME LOOP IF BOSS CAN'T LAND A HIT) ---
+    public void forceTeleport() {
+        if (!isDead && currentPhase != Phase.TRANSFORMING && currentAction != Action.TELEPORTING) {
+            startAction(Action.TELEPORTING);
+            teleportCooldown = currentPhase == Phase.ONE ? TELEPORT_CD_MAX : TELEPORT_CD_MAX * 0.7f;
+        }
+    }
+
     private void startAction(Action act) {
         currentAction = act;
         frameIndex = 0;
@@ -446,17 +454,6 @@ public class Boss {
             sr.setColor(Color.PURPLE);
             sr.rect(bx, by - 15, barW * (transformTimer / 2.5f), 5);
         }
-    }
-
-    // --- NEW: RENDER BOSS NAME TEXT ---
-    public void renderUIText(SpriteBatch batch, com.badlogic.gdx.graphics.g2d.BitmapFont font) {
-        if (isDead) return;
-        float barW = 1000;
-        float bx = (1280 - barW) / 2;
-        float by = 680;
-        
-        font.setColor(Color.WHITE);
-        font.draw(batch, "Lord Malakor, the Crimson Sovereign", bx, by + 45);
     }
 
     public void dispose() {

@@ -32,13 +32,14 @@ public class OathboundGame extends ApplicationAdapter {
     private BitmapFont smallButtonFont; 
     
     // --- GAME STATES ---
-    public enum GameState { TITLE, RULES, LEVEL_SELECT, PLAYING, LEVEL_COMPLETE, GAME_OVER }
+    public enum GameState { TITLE, RULES, LEVEL_SELECT, PLAYING, LEO_SAVED, LEVEL_COMPLETE, GAME_OVER }
     private GameState gameState = GameState.TITLE;
     
     // UI & Background Layers
     private Texture titleScreenTex;
     private Texture levelSelectTex; 
     private Texture ruleScreenTex;
+    private Texture leoTex; // NEW: Leo saved screen background
     private Texture buttonTex; 
     private Texture button2Tex; 
     private TextureRegion btn2Next, btn2Restart, btn2Menu; 
@@ -68,6 +69,7 @@ public class OathboundGame extends ApplicationAdapter {
     private int spawnY;
     private float playerDamageTimer = 0f;
     private float bossDeathTimer = 0f;
+    private float bossNoDamageTimer = 0f; // NEW: Timer for forcing boss teleports
 
     @Override
     public void create() {
@@ -114,6 +116,11 @@ public class OathboundGame extends ApplicationAdapter {
         
         if (Gdx.files.internal("sprites/rule_screen.png").exists()) {
             ruleScreenTex = new Texture(Gdx.files.internal("sprites/rule_screen.png"));
+        }
+        
+        // Load Leo Screen Texture
+        if (Gdx.files.internal("sprites/leo.png").exists()) {
+            leoTex = new Texture(Gdx.files.internal("sprites/leo.png"));
         }
         
         if (Gdx.files.internal("sprites/button.png").exists()) {
@@ -166,6 +173,7 @@ public class OathboundGame extends ApplicationAdapter {
         if (boss != null) boss.dispose();
         boss = null;
         bossDeathTimer = 0f; 
+        bossNoDamageTimer = 0f; // Reset boss damage timer on load
         
         String levelPath = "levels/level_" + level + ".txt";
         System.out.println("Loading Level: " + levelPath);
@@ -239,6 +247,8 @@ public class OathboundGame extends ApplicationAdapter {
             renderLevelSelect();
         } else if (gameState == GameState.PLAYING) {
             renderGameplay();
+        } else if (gameState == GameState.LEO_SAVED) {
+            renderLeoScreen(); // NEW: Render the Leo screen
         } else if (gameState == GameState.LEVEL_COMPLETE) {
             renderLevelComplete(); 
         } else if (gameState == GameState.GAME_OVER) {
@@ -500,13 +510,55 @@ public class OathboundGame extends ApplicationAdapter {
         batch.end();
     }
 
+    // --- NEW: LEO SAVED SCREEN ---
+    private void renderLeoScreen() {
+        Vector3 mousePos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
+        camera.unproject(mousePos);
+        float mx = mousePos.x;
+        float my = mousePos.y;
+
+        batch.begin();
+        if (leoTex != null) {
+            batch.draw(leoTex, 0, 0, 1280, 736, 0, 0, leoTex.getWidth(), leoTex.getHeight(), false, true);
+        } else if (bgLayer1 != null) {
+            batch.draw(bgLayer1, 0, 0, 1280, 736, 0, 0, bgLayer1.getWidth(), bgLayer1.getHeight(), false, true);
+        }
+
+        // Draw "You have saved Leo!" Title
+        largeTitleFont.setColor(Color.valueOf("ffe14d")); // Custom Gold
+        GlyphLayout titleLayout = new GlyphLayout(largeTitleFont, "You have saved Leo!");
+        largeTitleFont.draw(batch, titleLayout, (1280 - titleLayout.width) / 2, 80);
+
+        // Next Button (Top Left)
+        Rectangle nextBtn = new Rectangle(30, 30, 200, 80);
+        boolean nextHover = nextBtn.contains(mx, my);
+
+        if (buttonTex != null) {
+            batch.setColor(nextHover ? new Color(0.8f, 0.6f, 1.0f, 1f) : Color.WHITE);
+            batch.draw(buttonTex, nextBtn.x, nextBtn.y, nextBtn.width, nextBtn.height, 0, 0, buttonTex.getWidth(), buttonTex.getHeight(), false, true);
+            batch.setColor(Color.WHITE);
+        }
+
+        smallButtonFont.setColor(nextHover ? Color.WHITE : Color.valueOf("ffe14d"));
+        GlyphLayout nextLayout = new GlyphLayout(smallButtonFont, "NEXT");
+        smallButtonFont.draw(batch, nextLayout, nextBtn.x + (nextBtn.width - nextLayout.width) / 2, nextBtn.y + (nextBtn.height - nextLayout.height) / 2 + 3);
+        
+        batch.end();
+
+        // Handle Next interaction
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || 
+           (nextHover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT))) {
+            gameState = GameState.LEVEL_COMPLETE; // Proceed to Trials Completed
+        }
+    }
+
     private void renderLevelComplete() {
         Vector3 mousePos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
         camera.unproject(mousePos);
         float mx = mousePos.x;
         float my = mousePos.y;
 
-        // Increased topBox width by another 20px to 1215, centered nicely
+        // Increased topBox width from 1190 to 1215, centered nicely
         Rectangle topBox = new Rectangle((1280 / 2) - 607, 5, 1215, 480); 
 
         // Hide next button on Level 10
@@ -683,6 +735,8 @@ public class OathboundGame extends ApplicationAdapter {
             gameState = GameState.GAME_OVER;
             return;
         }
+
+        int healthBeforeFrame = player.getHealth();
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.TAB)) switchCharacter();
         
@@ -862,6 +916,17 @@ public class OathboundGame extends ApplicationAdapter {
             }
         }
 
+        // --- NEW: 5 SECOND TELEPORT LOGIC ---
+        if (player.getHealth() < healthBeforeFrame) {
+            bossNoDamageTimer = 0f;
+        } else if (boss != null && !boss.isDead()) {
+            bossNoDamageTimer += dt;
+            if (bossNoDamageTimer >= 5.0f) {
+                boss.forceTeleport();
+                bossNoDamageTimer = 0f;
+            }
+        }
+
         if (player.getBounds().y > 800 || hitSpikes) {
             // Only take health away if vulnerable, or if falling completely off the map
             if (playerDamageTimer <= 0 || player.getBounds().y > 800) {
@@ -879,7 +944,11 @@ public class OathboundGame extends ApplicationAdapter {
         }
 
         if (vowStone != null && vowStone.checkCollision(player.getBounds())) {
-            gameState = GameState.LEVEL_COMPLETE;
+            if (currentLevel == MAX_LEVELS) {
+                gameState = GameState.LEO_SAVED; // Trigger ending sequence!
+            } else {
+                gameState = GameState.LEVEL_COMPLETE;
+            }
             return; 
         }
 
@@ -977,6 +1046,7 @@ public class OathboundGame extends ApplicationAdapter {
         if (titleScreenTex != null) titleScreenTex.dispose();
         if (levelSelectTex != null) levelSelectTex.dispose();
         if (ruleScreenTex != null) ruleScreenTex.dispose();
+        if (leoTex != null) leoTex.dispose();
         if (buttonTex != null) buttonTex.dispose();
         if (button2Tex != null) button2Tex.dispose(); 
         if (levelCompleteTex != null) levelCompleteTex.dispose(); 

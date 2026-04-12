@@ -11,3 +11,4 @@ com\oathbound\core\Enemy.class
 com\oathbound\core\Beastman.class
 com\oathbound\core\VowStone.class
 com\oathbound\core\Player.class
+com\oathbound\core\Boss$1.class

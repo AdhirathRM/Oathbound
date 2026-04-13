@@ -1,0 +1,5 @@
+<module rename-to="oathbound">
+<inherits name="com.oathbound.GdxDefinition"/>
+<collapse-all-properties/>
+<add-linker name="xsiframe"/>
+</module>

@@ -1,6 +1,5 @@
 {
-    "java.project.sourcePaths": [
-        "src/main/java",
-        "res"
-    ]
+  "java.project.sourcePaths": [
+    "desktop/src/com/oathbound/desktop/com/oathbound/desktop"
+  ]
 }

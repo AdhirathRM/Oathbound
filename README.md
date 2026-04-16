@@ -123,3 +123,5 @@ Full backlog: `Oathbound_Product_Backlog.xlsx`
 - [ ] PB-005 — GameState enum branching ✅ *(done in this scaffold)*
 - [ ] PB-006 — `Rectangle.intersects()` collision
 - [ ] PB-007 — Test map passes full playthrough
+
+<!-- CI verified -->

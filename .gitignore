@@ -18,3 +18,7 @@ bin/
 # Windows
 Thumbs.db
 .vercel
+
+build/
+html/build/
+.gradle/

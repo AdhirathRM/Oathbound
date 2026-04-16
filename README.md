@@ -125,3 +125,4 @@ Full backlog: `Oathbound_Product_Backlog.xlsx`
 - [ ] PB-007 — Test map passes full playthrough
 
 <!-- CI verified -->
+<!-- Docker CI verified -->
